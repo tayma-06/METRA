@@ -1,6 +1,6 @@
 import React from 'react';
-// 1. We now also import 'Outlet'
-import { BrowserRouter as Router, Routes, Route, Link, Outlet } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Outlet, Navigate } from 'react-router-dom';
+import { useAuth } from './contexts/AuthContext'; // 1. Import useAuth
 
 // --- Page Components ---
 import Dashboard from './components/Dashboard';
@@ -10,58 +10,90 @@ import StudyGroups from './components/StudyGroups';
 import AISolver from './components/AISolver';
 import ProgressAnalytics from './components/ProgressAnalytics';
 import MaterialRepository from './components/MaterialRepository';
+import Login from './components/Login'; // 2. Import new pages
+import Signup from './components/Signup';
+import Profile from './components/Profile';
 import './styles.css';
 
-// 2. --- Create a separate Layout component ---
-// This component defines the *persistent* part of your app:
-// the navbar and the main container where pages will be rendered.
-const AppLayout = () => (
-    <div className="App">
-        <nav className="navbar">
-            <Link to="/" className="nav-brand">METRA</Link>
-            <div className="nav-links">
-                <Link to="/reviews">Course Reviews</Link>
-                <Link to="/hub">Senior Hub</Link>
-                <Link to="/groups">Study Groups</Link>
-                <Link to="/solver">AI Solver</Link>
-                <Link to="/progress">My Progress</Link>
-                <Link to="/materials">Materials</Link>
-            </div>
-            <div className="nav-user">Ayesha</div>
-        </nav>
-        <main className="main-content">
-            {/* 3. The <Outlet> component is a placeholder.
-          React Router will render the correct page component here
-          (e.g., <Dashboard />, <CourseReviews />, etc.) */}
-            <Outlet />
-        </main>
-    </div>
-);
+// 3. --- Create a Protected Route component ---
+// This component checks if a user is logged in.
+// If not, it redirects them to the /login page.
+const ProtectedRoute = () => {
+    const { currentUser } = useAuth();
+    return currentUser ? <Outlet /> : <Navigate to="/login" replace />;
+};
 
-// 4. --- The App component is now cleaner ---
-// Its only job is to define the application's routes.
+// 4. --- Update the Layout ---
+const AppLayout = () => {
+    const { currentUser } = useAuth(); // Get the current user
+
+    return (
+        <div className="App">
+            <nav className="navbar">
+                <Link to="/" className="nav-brand">METRA</Link>
+                <div className="nav-links">
+                    {/* Only show main links if logged in */}
+                    {currentUser && (
+                        <>
+                            <Link to="/">Dashboard</Link> {/* Added Dashboard link */}
+                            <Link to="/reviews">Course Reviews</Link>
+                            <Link to="/hub">Senior Hub</Link>
+                            <Link to="/groups">Study Groups</Link>
+                            <Link to="/solver">AI Solver</Link>
+                            <Link to="/progress">My Progress</Link>
+                            <Link to="/materials">Materials</Link>
+                        </>
+                    )}
+                </div>
+
+                {/* 5. Show Profile or Login/Signup based on auth state */}
+                <div className="nav-user">
+                    {currentUser ? (
+                        <Link to="/profile" style={{backgroundColor: '#e6f2ff', color: '#007aff', padding: '0.5rem 1rem', borderRadius: '20px', textDecoration: 'none'}}>
+                            Profile
+                        </Link>
+                    ) : (
+                        <>
+                            <Link to="/login" style={{marginRight: '1rem', color: '#333', fontWeight: 500}}>Log In</Link>
+                            <Link to="/signup" style={{backgroundColor: '#007aff', color: 'white', padding: '0.5rem 1rem', borderRadius: '20px', textDecoration: 'none', fontWeight: 500}}>
+                                Sign Up
+                            </Link>
+                        </>
+                    )}
+                </div>
+            </nav>
+            <main className="main-content">
+                <Outlet />
+            </main>
+        </div>
+    );
+};
+
+// 6. --- Update the App's Routes ---
 function App() {
     return (
         <Router>
             <Routes>
-                {/* 5. We create a parent route that uses our AppLayout.
-            All child routes will now render *inside* the <Outlet>
-            in AppLayout. */}
+                {/* Routes that use the main layout */}
                 <Route path="/" element={<AppLayout />}>
 
-                    {/* 6. The 'index' route renders at the parent's path ("/") */}
-                    <Route index element={<Dashboard />} />
+                    {/* Public routes (Login, Signup) */}
+                    <Route path="login" element={<Login />} />
+                    <Route path="signup" element={<Signup />} />
 
-                    {/* 7. All other pages are now nested routes */}
-                    <Route path="reviews" element={<CourseReviews />} />
-                    <Route path="hub" element={<SeniorHub />} />
-                    <Route path="groups" element={<StudyGroups />} />
-                    <Route path="solver" element={<AISolver />} />
-                    <Route path="progress" element={<ProgressAnalytics />} />
-                    <Route path="materials" element={<MaterialRepository />} />
+                    {/* --- Protected Routes --- */}
+                    {/* We wrap all protected pages inside our new <ProtectedRoute> */}
+                    <Route element={<ProtectedRoute />}>
+                        <Route index element={<Dashboard />} />
+                        <Route path="reviews" element={<CourseReviews />} />
+                        <Route path="hub" element={<SeniorHub />} />
+                        <Route path="groups" element={<StudyGroups />} />
+                        <Route path="solver" element={<AISolver />} />
+                        <Route path="progress" element={<ProgressAnalytics />} />
+                        <Route path="materials" element={<MaterialRepository />} />
+                        <Route path="profile" element={<Profile />} />
+                    </Route>
 
-                    {/* You could add a 404 Not Found route here later */}
-                    {/* <Route path="*" element={<NotFound />} /> */}
                 </Route>
             </Routes>
         </Router>

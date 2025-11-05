@@ -1,11 +1,8 @@
-// Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+// 1. We need to import getAuth
+import { getAuth } from "firebase/auth";
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// This is your config object. Perfect!
 const firebaseConfig = {
     apiKey: "AIzaSyDODUa-r44xdunMa-37ahfePERTbD8rVlk",
     authDomain: "metra-app.firebaseapp.com",
@@ -18,4 +15,6 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+
+// 2. Initialize auth AND EXPORT IT so other files can use it
+export const auth = getAuth(app);

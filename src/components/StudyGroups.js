@@ -9,11 +9,17 @@ function StudyGroups() {
     const [error, setError] = useState(null);
     const [joinMessage, setJoinMessage] = useState(null);
 
+    // This state will hold our new, non-blocking message
+    const [featureMessage, setFeatureMessage] = useState(null);
+
     // 1. --- FETCH ALL GROUPS (GET Request) ---
     useEffect(() => {
         const fetchGroups = async () => {
             setIsLoading(true);
             setError(null);
+            setFeatureMessage(null); // Clear messages on load
+            setJoinMessage(null);
+
             try {
                 const response = await fetch(`${BACKEND_URL}/api/study-groups`);
                 if (!response.ok) {
@@ -35,6 +41,7 @@ function StudyGroups() {
     const handleJoinGroup = async (groupId) => {
         setError(null);
         setJoinMessage(null);
+        setFeatureMessage(null);
 
         try {
             const response = await fetch(`${BACKEND_URL}/api/study-groups/join`, {
@@ -62,6 +69,12 @@ function StudyGroups() {
         }
     };
 
+    // 3. --- Handle "Find Group" button click ---
+    const handleFindGroupClick = () => {
+        // Instead of an alert, we set a message in our state.
+        setFeatureMessage("This feature is coming soon! Our AI is busy learning.");
+    };
+
     return (
         <div className="page-container">
             <h2>🤝 Smart Study Groups</h2>
@@ -71,10 +84,17 @@ function StudyGroups() {
             <div className="analytics-card" style={{ marginBottom: '2rem' }}>
                 <h4>Find Your Perfect Group</h4>
                 <p>Our AI will match you with other students based on your courses, goals, and schedule.</p>
-                <button onClick={() => alert("This feature is coming soon!")}>
+                <button onClick={handleFindGroupClick}>
                     Find a New Group
                 </button>
             </div>
+
+            {/* This is where our new message will appear */}
+            {featureMessage && (
+                <div className="analytics-card" style={{ marginBottom: '2rem', backgroundColor: '#fffbe6' }}>
+                    <p>{featureMessage}</p>
+                </div>
+            )}
 
             {joinMessage && (
                 <div className="analytics-card" style={{ marginBottom: '2rem', backgroundColor: '#e6f2ff' }}>

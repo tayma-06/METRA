@@ -1,146 +1,273 @@
 const express = require('express');
 const cors = require('cors');
-const fetch = require('node-fetch'); // We just installed this!
+const fetch = require('node-fetch');
 
-const app = express();
-const PORT = 8000;
+// --- Firebase Admin Setup ---
+const admin = require('firebase-admin');
+// This assumes 'serviceAccountKey.json' is in the same directory
+const serviceAccount = require('./serviceAccountKey.json');
 
-// --- Middleware ---
-app.use(cors());
-app.use(express.json());
-
-// --- (F) A K E   D A T A B A S E) ---
-// In your hackathon, this data would come from a real database!
-let mockReviews = [
-    { id: 1, course: "CSE321", professor: "Dr. Ahmed", rating: 5, comment: "Amazing professor, explains everything clearly." },
-    { id: 2, course: "CSE472", professor: "Dr. Khan", rating: 3, comment: "Tough course, but fair." }
-];
-let mockPosts = [
-    { id: 1, author: "Ayesha (2nd Year)", question: "Need a roadmap for Machine Learning courses and internship guidance?", reply: "From: Senior Member (AI Club)\n\nHere’s the roadmap we recommend: 1. Start with Python & Stats. 2. Take Intro to AI..." }
-];
-
-// --- API Endpoints ---
-
-// 1. Test Route
-app.get('/api/test', (req, res) => {
-    res.json({ message: "Hello from the METRA backend!" });
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
 });
 
-// 2. AI Problem Solver
+const db = admin.firestore();
+// --- End Firebase Admin Setup ---
+
+const app = express();
+app.use(express.json()); // Middleware to parse JSON bodies
+app.use(cors()); // Middleware to allow cross-origin requests
+
+const PORT = process.env.PORT || 8000;
+const GEMINI_API_KEY = "PASTE_YOUR_GEMINI_API_KEY_HERE"; // TODO: Add your API key
+
+// --- Mock Data for features NOT yet in Firestore ---
+const mockAnalysis = {
+    title: "Personalized Plan for Quiz 3",
+    summary: "Your score was 72%, just below the class average of 78%. Analysis shows strong performance in basic data structures, but weaknesses in Dynamic Programming.",
+    plan: [
+        "Focus on Dynamic Programming. Review the 'Knapsack' and 'Longest Common Subsequence' problems.",
+        "Practice 3 medium-level DP problems on LeetCode or HackerRank.",
+        "Review the 'Big O' notation for recursive algorithms, as this was a common point of error."
+    ]
+};
+
+// === API ENDPOINTS ===
+
+// --- AI Solver Endpoint (Using Gemini) ---
 app.post('/api/solve', async (req, res) => {
     const { question } = req.body;
+    console.log('Received question:', question);
+
     if (!question) {
-        return res.status(400).json({ error: 'No question provided.' });
+        return res.status(400).json({ error: 'Question is required.' });
     }
 
-    console.log(`Received question: ${question}`);
+    // If the API key is still the placeholder, just send the mock response
+    if (!GEMINI_API_KEY || GEMINI_API_KEY === "PASTE_YOUR_GEMINI_API_KEY_HERE") {
+        return res.json({
+            answer: `This is a mock answer for: **"${question}"**. \n\n The backend successfully received your question. To get a real answer, you need to: \n 1. Get a Gemini API key. \n 2. Paste it into 'server.js'. \n 3. Restart your server.`
+        });
+    }
 
-    // --- THIS IS HOW YOU CALL THE GEMINI AI ---
-    // 1. Define the API key (DO NOT post this publicly in a real app)
-    //    For the hackathon, you can get a key from Google AI Studio.
-    const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"; // <-- IMPORTANT: Replace this
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`;
-
-    // 2. Create the prompt for the AI
-    const systemPrompt = "You are METRA, an expert academic AI assistant. You explain complex computer science concepts simply and clearly, step-by-step. Format your answer in HTML with <p>, <strong>, and <ul> lists.";
-
-    const payload = {
-        contents: [{ parts: [{ text: question }] }],
-        systemInstruction: {
-            parts: [{ text: systemPrompt }]
-        },
-    };
-
+    // --- REAL GEMINI API CALL ---
     try {
-        // 3. Make the API call
-        const aiResponse = await fetch(apiUrl, {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+
+        const payload = {
+            contents: [{
+                parts: [{ text: question }]
+            }]
+        };
+
+        const apiRes = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
-        if (!aiResponse.ok) {
-            throw new Error(`AI API error! Status: ${aiResponse.status}`);
+        if (!apiRes.ok) {
+            console.error('Gemini API Error Body:', await apiRes.text());
+            throw new Error(`AI API error! Status: ${apiRes.status}`);
         }
 
-        const aiResult = await aiResponse.json();
-        const aiText = aiResult.candidates[0].content.parts[0].text;
-
-        // 4. Send the AI's answer back to the frontend
-        res.json({ answer: aiText });
+        const data = await apiRes.json();
+        const text = data.candidates[0].content.parts[0].text;
+        res.json({ answer: text });
 
     } catch (error) {
-        console.error("AI Error:", error);
-        // Send a fallback mock response if the AI fails
-        res.status(500).json({
-            answer: `<p>This is a <strong>mock answer</strong> because the AI call failed.</p><p>Error: ${error.message}</p><p>Did you set your API key in server.js?</p>`
-        });
+        console.error('Gemini API error:', error);
+        res.status(500).json({ error: 'Failed to get answer from AI. ' + error.message });
+    }
+
+});
+
+// --- Course Reviews Endpoints (USING FIRESTORE) ---
+app.get('/api/reviews', async (req, res) => {
+    try {
+        const snapshot = await db.collection('reviews').orderBy('createdAt', 'desc').get();
+        const reviews = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        res.json(reviews);
+    } catch (error) {
+        console.error('Failed to fetch reviews:', error);
+        res.status(500).json({ error: 'Failed to fetch reviews.' });
     }
 });
 
-// 3. Course Reviews
-app.get('/api/reviews', (req, res) => {
-    res.json(mockReviews);
+app.post('/api/reviews', async (req, res) => {
+    try {
+        const newReview = req.body;
+        // Add a server-side timestamp
+        newReview.createdAt = admin.firestore.FieldValue.serverTimestamp();
+
+        const docRef = await db.collection('reviews').add(newReview);
+
+        res.status(201).json({ id: docRef.id, ...newReview });
+    } catch (error) {
+        console.error('Failed to add review:', error);
+        res.status(500).json({ error: 'Failed to add review.' });
+    }
 });
 
-app.post('/api/reviews', (req, res) => {
-    const { course, professor, rating, comment } = req.body;
-    const newReview = {
-        id: mockReviews.length + 1,
-        course,
-        professor,
-        rating,
-        comment
-    };
-    mockReviews.push(newReview);
-    console.log("Posted new review:", newReview);
-    res.status(201).json(newReview);
+
+// --- Senior Hub Endpoints (USING FIRESTORE) ---
+app.get('/api/hub/posts', async (req, res) => {
+    try {
+        const snapshot = await db.collection('hub_posts').orderBy('createdAt', 'desc').get();
+        const posts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        res.json(posts);
+    } catch (error) {
+        console.error('Failed to fetch posts:', error);
+        res.status(500).json({ error: 'Failed to fetch posts.' });
+    }
 });
 
-// 4. Senior Suggestion Hub
-app.get('/api/hub/posts', (req, res) => {
-    res.json(mockPosts);
+app.post('/api/hub/posts', async (req, res) => {
+    try {
+        const newPost = req.body;
+        newPost.createdAt = admin.firestore.FieldValue.serverTimestamp();
+        newPost.reply = null; // Ensure reply is null on creation
+
+        const docRef = await db.collection('hub_posts').add(newPost);
+
+        res.status(201).json({ id: docRef.id, ...newPost });
+    } catch (error) {
+        console.error('Failed to add post:', error);
+        res.status(500).json({ error: 'Failed to add post.' });
+    }
 });
 
-app.post('/api/hub/posts', (req, res) => {
-    const { author, question } = req.body;
-    const newPost = {
-        id: mockPosts.length + 1,
-        author,
-        question,
-        reply: null // No reply yet
-    };
-    mockPosts.push(newPost);
-    console.log("Posted new hub question:", newPost);
-    res.status(201).json(newPost);
-});
-
-// 5. Progress Analyst AI
+// --- Progress Analyst Endpoint (Mock Data) ---
+// We'll leave this as mock, as a real AI call is complex.
 app.post('/api/progress', (req, res) => {
     const { quizId, score, classAverage } = req.body;
-    console.log("Received progress data:", req.body);
+    console.log('Received progress data:', { quizId, score, classAverage });
 
-    // --- AI ANALYSIS ---
-    // You would send this data to another AI prompt, e.g.:
-    // "A student scored ${score} on Quiz ${quizId}, where the class average was ${classAverage}.
-    //  What is a one-paragraph personalized improvement plan?"
-
-    // For now, send a mock plan
-    const mockAnalysis = {
-        title: `Analysis for Quiz ${quizId}`,
-        summary: `Your score of ${score}% is a great start. You're showing good understanding, but let's focus on closing the gap with the class average of ${classAverage}%.`,
-        plan: [
-            "Focus on Dynamic Programming (based on mock analysis).",
-            "Review lecture notes for weeks 3 and 4.",
-            "Try 3 practice problems on this topic."
-        ]
-    };
-
+    // In a real app, you would send this data to an AI to *generate* the plan.
+    // For the demo, we just return our mock analysis.
     res.json(mockAnalysis);
 });
 
+// --- Material Repository Endpoints (USING FIRESTORE) ---
+app.get('/api/materials', async (req, res) => {
+    try {
+        const snapshot = await db.collection('materials').orderBy('createdAt', 'desc').get();
+        const materials = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        res.json(materials);
+    } catch (error) {
+        console.error('Failed to fetch materials:', error);
+        res.status(500).json({ error: 'Failed to fetch materials.' });
+    }
+});
 
-// --- Start the Server ---
+app.post('/api/materials/upload', async (req, res) => {
+    try {
+        const { course, title, category } = req.body;
+        const newMaterial = {
+            course,
+            title,
+            category,
+            link: '#', // Placeholder link. In a real app, this would come from Firebase Storage.
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        const docRef = await db.collection('materials').add(newMaterial);
+        res.status(201).json({ id: docRef.id, ...newMaterial });
+    } catch (error) {
+        console.error('Failed to upload material:', error);
+        res.status(500).json({ error: 'Failed to upload material.' });
+    }
+});
+
+
+// --- Smart Study Groups Endpoints (USING FIRESTORE) ---
+app.get('/api/study-groups', async (req, res) => {
+    try {
+        const snapshot = await db.collection('study_groups').get();
+        const groups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        res.json(groups);
+    } catch (error) {
+        console.error('Failed to fetch study groups:', error);
+        res.status(500).json({ error: 'Failed to fetch study groups.' });
+    }
+});
+
+app.post('/api/study-groups/join', async (req, res) => {
+    const { groupId } = req.body;
+    const groupRef = db.collection('study_groups').doc(groupId);
+
+    try {
+        // Use a transaction to safely update the group
+        const updatedGroup = await db.runTransaction(async (transaction) => {
+            const groupDoc = await transaction.get(groupRef);
+            if (!groupDoc.exists) {
+                throw new Error("Group not found.");
+            }
+
+            const groupData = groupDoc.data();
+            if (groupData.members >= groupData.capacity) {
+                throw new Error("This group is already full.");
+            }
+
+            // Increment the member count
+            const newMemberCount = groupData.members + 1;
+            transaction.update(groupRef, { members: newMemberCount });
+
+            // Return the updated data
+            return { ...groupData, members: newMemberCount };
+        });
+
+        res.json({
+            message: 'Successfully joined the group!',
+            group: { id: groupRef.id, ...updatedGroup } // Send back the updated group
+        });
+
+    } catch (error) {
+        console.error('Failed to join group:', error);
+        // Send back specific error messages (like "Group is full")
+        res.status(400).json({ message: error.message || 'Failed to join group.' });
+    }
+});
+
+
+// --- Dashboard Summary Endpoint (NOW USING FIRESTORE) ---
+app.get('/api/dashboard-summary', async (req, res) => {
+    try {
+        // 1. Get the latest post from the Senior Hub
+        const postSnapshot = await db.collection('hub_posts')
+            .orderBy('createdAt', 'desc')
+            .limit(1)
+            .get();
+        const latestPost = postSnapshot.docs[0] ? { id: postSnapshot.docs[0].id, ...postSnapshot.docs[0].data() } : null;
+
+        // 2. Get the latest material
+        const materialSnapshot = await db.collection('materials')
+            .orderBy('createdAt', 'desc')
+            .limit(1)
+            .get();
+        const latestMaterial = materialSnapshot.docs[0] ? { id: materialSnapshot.docs[0].id, ...materialSnapshot.docs[0].data() } : null;
+
+        // 3. Get an open study group (this is more complex, so we'll just get the first one)
+        // A better query would be: .where('members', '<', 'capacity')
+        const groupSnapshot = await db.collection('study_groups')
+            .limit(1)
+            .get();
+        const openGroup = groupSnapshot.docs[0] ? { id: groupSnapshot.docs[0].id, ...groupSnapshot.docs[0].data() } : null;
+
+        res.json({
+            latestPost,
+            latestMaterial,
+            openGroup
+        });
+
+    } catch (error) {
+        console.error('Failed to fetch dashboard summary:', error);
+        res.status(500).json({ error: 'Failed to fetch dashboard summary.' });
+    }
+});
+
+
+// --- Start Server ---
 app.listen(PORT, () => {
     console.log(`METRA backend server listening on http://localhost:${PORT}`);
 });
