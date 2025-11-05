@@ -12,6 +12,7 @@ admin.initializeApp({
 });
 
 const db = admin.firestore();
+const FieldValue = admin.firestore.FieldValue;
 // --- End Firebase Admin Setup ---
 
 const app = express();
@@ -19,7 +20,7 @@ app.use(express.json()); // Middleware to parse JSON bodies
 app.use(cors()); // Middleware to allow cross-origin requests
 
 const PORT = process.env.PORT || 8000;
-// Make sure to paste your real key here!
+// Make sure to paste your Gemini API key here
 const GEMINI_API_KEY = "AIzaSyA4CI4sCXO65h9LDtvR65ygDbFyiLvsb3M";
 
 // --- Mock Data for features NOT yet in Firestore ---
@@ -44,25 +45,24 @@ app.post('/api/solve', async (req, res) => {
         return res.status(400).json({ error: 'Question is required.' });
     }
 
-    // This check is no longer needed since you added your key, but we'll leave it.
+    // If the API key is still the placeholder, just send the mock response
     if (!GEMINI_API_KEY || GEMINI_API_KEY === "PASTE_YOUR_GEMINI_API_KEY_HERE") {
         return res.json({
-            answer: `This is a mock answer for: **"${question}"**. \n\n The backend successfully received your question. To get a real answer, you need to: \n 1. Get a Gemini API key. \n 2. Paste it into 'server.js'. \n 3. Restart your server.`
+            answer: `This is a **mock answer** for: "${question}". \n\n The backend successfully received your question. To get a real answer, you need to: \n 1. Get a Gemini API key. \n 2. Paste it into 'server.js'. \n 3. Restart your server.\n\n ### Sample Formatted Answer:\n* **Point 1:** This is how lists look.\n* **Point 2:** And **bold text**.`
         });
     }
 
     // --- REAL GEMINI API CALL ---
     try {
-        // --- THIS IS THE FIXED LINE ---
-        // I've updated the model name to the correct one.
-        const url = `https://generativelace.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`;
+        // Use the correct model
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`;
 
-        // Tell the AI to use Markdown
-        const fullPrompt = `Please provide a helpful, step-by-step answer to the following question. Use Markdown for formatting (e.g., **bold**, *italics*, \`code\`, lists):\n\n${question}`;
+        // Add instruction to use Markdown
+        const fullPrompt = `Please answer this student's question. Use Markdown for formatting (like lists, bold, and headings) to make the answer easy to read.\n\nQuestion: ${question}`;
 
         const payload = {
             contents: [{
-                parts: [{ text: fullPrompt }] // Use the new formatted prompt
+                parts: [{ text: fullPrompt }]
             }]
         };
 
@@ -111,7 +111,7 @@ app.post('/api/reviews', async (req, res) => {
     try {
         const newReview = req.body;
         // Add a server-side timestamp
-        newReview.createdAt = admin.firestore.FieldValue.serverTimestamp();
+        newReview.createdAt = FieldValue.serverTimestamp();
 
         const docRef = await db.collection('reviews').add(newReview);
 
@@ -138,7 +138,7 @@ app.get('/api/hub/posts', async (req, res) => {
 app.post('/api/hub/posts', async (req, res) => {
     try {
         const newPost = req.body;
-        newPost.createdAt = admin.firestore.FieldValue.serverTimestamp();
+        newPost.createdAt = FieldValue.serverTimestamp();
         newPost.reply = null; // Ensure reply is null on creation
 
         const docRef = await db.collection('hub_posts').add(newPost);
@@ -181,7 +181,7 @@ app.post('/api/materials/upload', async (req, res) => {
             title,
             category,
             link: '#', // Placeholder link. In a real app, this would come from Firebase Storage.
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
+            createdAt: FieldValue.serverTimestamp()
         };
 
         const docRef = await db.collection('materials').add(newMaterial);
@@ -194,9 +194,37 @@ app.post('/api/materials/upload', async (req, res) => {
 
 
 // --- Smart Study Groups Endpoints (USING FIRESTORE) ---
+
+// --- NEW: Endpoint to CREATE a new study group ---
+app.post('/api/study-groups', async (req, res) => {
+    const { name, description, capacity, creatorId } = req.body;
+    if (!name || !description || !capacity || !creatorId) {
+        return res.status(400).json({ message: 'Missing required fields.' });
+    }
+
+    try {
+        const newGroup = {
+            name,
+            description,
+            capacity: parseInt(capacity, 10),
+            createdAt: FieldValue.serverTimestamp(),
+            // The creator is automatically the first member
+            memberIds: [creatorId]
+        };
+
+        const docRef = await db.collection('study_groups').add(newGroup);
+        res.status(201).json({ id: docRef.id, ...newGroup });
+
+    } catch (error) {
+        console.error('Failed to create group:', error);
+        res.status(500).json({ message: 'Failed to create group.' });
+    }
+});
+
+
 app.get('/api/study-groups', async (req, res) => {
     try {
-        const snapshot = await db.collection('study_groups').get();
+        const snapshot = await db.collection('study_groups').orderBy('createdAt', 'desc').get();
         const groups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         res.json(groups);
     } catch (error) {
@@ -206,7 +234,11 @@ app.get('/api/study-groups', async (req, res) => {
 });
 
 app.post('/api/study-groups/join', async (req, res) => {
-    const { groupId } = req.body;
+    const { groupId, userId } = req.body;
+    if (!groupId || !userId) {
+        return res.status(400).json({ message: 'Group ID and User ID are required.' });
+    }
+
     const groupRef = db.collection('study_groups').doc(groupId);
 
     try {
@@ -218,16 +250,27 @@ app.post('/api/study-groups/join', async (req, res) => {
             }
 
             const groupData = groupDoc.data();
-            if (groupData.members >= groupData.capacity) {
+
+            const memberIds = groupData.memberIds || [];
+
+            // Check if user is already a member
+            if (memberIds.includes(userId)) {
+                throw new Error("You are already in this group.");
+            }
+
+            // Check if group is full
+            if (memberIds.length >= groupData.capacity) {
                 throw new Error("This group is already full.");
             }
 
-            // Increment the member count
-            const newMemberCount = groupData.members + 1;
-            transaction.update(groupRef, { members: newMemberCount });
+            // Update the array using FieldValue.arrayUnion
+            transaction.update(groupRef, {
+                memberIds: FieldValue.arrayUnion(userId)
+            });
 
             // Return the updated data
-            return { ...groupData, members: newMemberCount };
+            const newMemberIds = [...memberIds, userId];
+            return { ...groupData, memberIds: newMemberIds };
         });
 
         res.json({
@@ -242,54 +285,51 @@ app.post('/api/study-groups/join', async (req, res) => {
     }
 });
 
-
-// --- NEW: Study Group Chat Endpoints ---
+// --- Get a single group's details (for chat header) ---
 app.get('/api/study-groups/:id', async (req, res) => {
     try {
-        const groupId = req.params.id;
-        const groupRef = db.collection('study_groups').doc(groupId);
-        const groupDoc = await groupRef.get();
+        const { id } = req.params;
+        const groupRef = db.collection('study_groups').doc(id);
+        const doc = await groupRef.get();
 
-        if (!groupDoc.exists) {
-            return res.status(404).json({ error: 'Group not found.' });
+        if (!doc.exists) {
+            return res.status(404).json({ message: 'Group not found' });
         }
 
-        res.json({ id: groupDoc.id, ...groupDoc.data() });
+        res.json({ id: doc.id, ...doc.data() });
     } catch (error) {
-        console.error('Failed to fetch group details:', error);
-        res.status(500).json({ error: 'Failed to fetch group details.' });
+        console.error('Failed to get group details:', error);
+        res.status(500).json({ message: 'Failed to get group details.' });
     }
 });
 
+// --- Post a message to a group chat ---
 app.post('/api/study-groups/:id/messages', async (req, res) => {
     try {
-        const groupId = req.params.id;
+        const { id } = req.params; // This is the groupId
         const { text, authorId, authorName } = req.body;
 
         if (!text || !authorId || !authorName) {
-            return res.status(400).json({ error: 'Missing message data.' });
+            return res.status(400).json({ message: 'Missing message data.' });
         }
 
-        const groupRef = db.collection('study_groups').doc(groupId);
-        const messagesRef = groupRef.collection('messages'); // Subcollection
-
-        const newMessage = {
+        // Add the message to the 'messages' subcollection in Firestore
+        const messageData = {
             text,
             authorId,
             authorName,
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
+            createdAt: FieldValue.serverTimestamp()
         };
 
-        const docRef = await messagesRef.add(newMessage);
-        res.status(201).json({ id: docRef.id, ...newMessage });
+        const messagesRef = db.collection('study_groups').doc(id).collection('messages');
+        const docRef = await messagesRef.add(messageData);
 
+        res.status(201).json({ id: docRef.id, ...messageData });
     } catch (error) {
         console.error('Failed to post message:', error);
-        res.status(500).json({ error: 'Failed to post message.' });
+        res.status(500).json({ message: 'Failed to post message.' });
     }
 });
-// --- End New Chat Endpoints ---
-
 
 // --- Dashboard Summary Endpoint (NOW USING FIRESTORE) ---
 app.get('/api/dashboard-summary', async (req, res) => {
@@ -308,9 +348,9 @@ app.get('/api/dashboard-summary', async (req, res) => {
             .get();
         const latestMaterial = materialSnapshot.docs[0] ? { id: materialSnapshot.docs[0].id, ...materialSnapshot.docs[0].data() } : null;
 
-        // 3. Get an open study group (this is more complex, so we'll just get the first one)
-        // A better query would be: .where('members', '<', 'capacity')
+        // 3. Get an open study group
         const groupSnapshot = await db.collection('study_groups')
+            .orderBy('createdAt', 'desc')
             .limit(1)
             .get();
         const openGroup = groupSnapshot.docs[0] ? { id: groupSnapshot.docs[0].id, ...groupSnapshot.docs[0].data() } : null;
