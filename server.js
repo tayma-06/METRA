@@ -4,16 +4,27 @@ const fetch = require('node-fetch');
 
 // --- Firebase Admin Setup ---
 const admin = require('firebase-admin');
-// This assumes 'serviceAccountKey.json' is in the same directory
-// NOTE: Make sure this file exists in your setup!
-const serviceAccount = require('./serviceAccountKey.json');
+let db;
+let FieldValue; // Declare FieldValue here
 
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-});
-
-const db = admin.firestore();
-const FieldValue = admin.firestore.FieldValue;
+// IMPORTANT: This file MUST be present for Firestore access to work.
+// We use try/catch to ensure the server starts even if the key is missing.
+try {
+    const serviceAccount = require('./serviceAccountKey.json');
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
+    db = admin.firestore();
+    FieldValue = admin.firestore.FieldValue; // Initialize FieldValue
+    console.log('Firebase Admin SDK initialized successfully.');
+} catch (error) {
+    console.error('*** WARNING: Firebase Admin SDK NOT initialized. ***');
+    console.error('*** Reason: Could not find or read "serviceAccountKey.json". ***');
+    console.error('*** Firestore endpoints will NOT work until this file is added. ***');
+    // Set mocks for safety if db is not initialized
+    db = null;
+    FieldValue = { serverTimestamp: () => new Date(), arrayUnion: (x) => [x] }; // Mock FieldValue
+}
 // --- End Firebase Admin Setup ---
 
 const app = express();
@@ -21,8 +32,20 @@ app.use(express.json()); // Middleware to parse JSON bodies
 app.use(cors()); // Middleware to allow cross-origin requests
 
 const PORT = process.env.PORT || 8000;
-// Make sure to paste your Gemini API key here
-const GEMINI_API_KEY = "AIzaSyA4CI4sCXO65h9LDtvR65ygDbFyiLvsb3M";
+// CRITICAL: Paste your real API key here, then restart the server.
+// If you see the mock answer, replace this string with your actual Gemini API Key.
+const GEMINI_API_KEY = "AIzaSyBx6lD5y6HMwjqBl6Cj0h1pgoIGW_SWuUo";
+
+
+// Helper function to check for DB readiness
+const checkDbReady = (res) => {
+    if (!db) {
+        res.status(503).json({ error: 'Database service unavailable. Please add serviceAccountKey.json to your backend folder and restart the server.' });
+        return false;
+    }
+    return true;
+};
+
 
 // --- Mock Data for features NOT yet in Firestore ---
 const mockAnalysis = {
@@ -46,19 +69,22 @@ app.post('/api/solve', async (req, res) => {
         return res.status(400).json({ error: 'Question is required.' });
     }
 
-    // If the API key is still the placeholder, just send the mock response
-    if (!GEMINI_API_KEY || GEMINI_API_KEY === "AIzaSyA4CI4sCXO65h9LDtvR65ygDbFyiLvsb3M") {
+    // --- FIX START: Checking for the placeholder key ---
+    const PLACEHOLDER_KEY = "YOUR_REAL_GEMINI_API_KEY_HERE";
+
+    if (!GEMINI_API_KEY || GEMINI_API_KEY === PLACEHOLDER_KEY) {
         return res.json({
-            answer: `This is a **mock answer** for: "${question}". \n\n The backend successfully received your question. To get a real answer, you need to: \n 1. Get a Gemini API key. \n 2. Paste it into 'server.js'. \n 3. Restart your server.\n\n ### Sample Formatted Answer:\n* **Point 1:** This is how lists look.\n* **Point 2:** And **bold text**.`
+            answer: `This is a **mock answer** for: "${question}". \n\n The backend successfully received your question. To get a real answer, you need to: \n 1. Get a real, unique Gemini API key. \n 2. Paste it into 'server.js' where it says \`"YOUR_REAL_GEMINI_API_KEY_HERE"\`. \n 3. Restart your server.\n\n ### Sample Formatted Answer:\n* **Point 1:** This is how lists look.\n* **Point 2:** And **bold text**.`
         });
     }
+    // --- FIX END ---
 
     // --- REAL GEMINI API CALL ---
     try {
-        // Use the correct model
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`;
+        const modelName = 'gemini-2.5-flash-preview-09-2025';
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
 
-        // Add instruction to use Markdown
+        // Use the combined prompt with Markdown instruction
         const fullPrompt = `Please answer this student's question. Use Markdown for formatting (like lists, bold, and headings) to make the answer easy to read.\n\nQuestion: ${question}`;
 
         const payload = {
@@ -79,13 +105,12 @@ app.post('/api/solve', async (req, res) => {
         }
 
         const data = await apiRes.json();
-        // Updated to handle potential safety blocks or empty responses
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
         if (text) {
             res.json({ answer: text });
         } else {
-            // This happens if the AI's response was blocked for safety
+            // This handles safety-blocked responses gracefully
             res.json({ answer: "I'm sorry, I can't provide a response to that. Please try a different question." });
         }
 
@@ -98,6 +123,7 @@ app.post('/api/solve', async (req, res) => {
 
 // --- Course Reviews Endpoints (USING FIRESTORE) ---
 app.get('/api/reviews', async (req, res) => {
+    if (!checkDbReady(res)) return;
     try {
         const snapshot = await db.collection('reviews').orderBy('createdAt', 'desc').get();
         const reviews = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -109,6 +135,7 @@ app.get('/api/reviews', async (req, res) => {
 });
 
 app.post('/api/reviews', async (req, res) => {
+    if (!checkDbReady(res)) return;
     try {
         const newReview = req.body;
         // Add a server-side timestamp
@@ -126,6 +153,7 @@ app.post('/api/reviews', async (req, res) => {
 
 // --- Senior Hub Endpoints (USING FIRESTORE) ---
 app.get('/api/hub/posts', async (req, res) => {
+    if (!checkDbReady(res)) return;
     try {
         const snapshot = await db.collection('hub_posts').orderBy('createdAt', 'desc').get();
         const posts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -137,12 +165,11 @@ app.get('/api/hub/posts', async (req, res) => {
 });
 
 app.post('/api/hub/posts', async (req, res) => {
+    if (!checkDbReady(res)) return;
     try {
         const newPost = req.body;
         newPost.createdAt = FieldValue.serverTimestamp();
-        newPost.reply = null; // Ensure reply is null on creation
 
-        // This ensures the new post object is stored correctly
         const postToSave = {
             course: newPost.course,
             question: newPost.question,
@@ -161,11 +188,12 @@ app.post('/api/hub/posts', async (req, res) => {
     }
 });
 
-// --- NEW: DELETE a Post (DELETE Request) ---
+// --- DELETE a Post (Only the author can delete the original question) ---
 app.delete('/api/hub/posts/:id', async (req, res) => {
+    if (!checkDbReady(res)) return;
     try {
         const { id } = req.params;
-        const { userId } = req.body; // Expecting userId in the request body for security
+        const { userId } = req.body;
 
         if (!userId) {
             return res.status(400).json({ message: "User ID is required for deletion." });
@@ -182,7 +210,6 @@ app.delete('/api/hub/posts/:id', async (req, res) => {
 
         // --- Security Check: Only the author can delete the post ---
         if (data.authorId !== userId) {
-            console.warn(`Unauthorized attempt to delete post ${id}. User ID: ${userId}, Post Author ID: ${data.authorId}`);
             return res.status(403).json({ message: "You are not authorized to delete this post." });
         }
 
@@ -198,6 +225,7 @@ app.delete('/api/hub/posts/:id', async (req, res) => {
 
 // --- Reply to a Post (PUT Request) ---
 app.put('/api/hub/posts/:id/reply', async (req, res) => {
+    if (!checkDbReady(res)) return;
     try {
         const { id } = req.params;
         const { replyText, authorId, authorName } = req.body;
@@ -210,19 +238,16 @@ app.put('/api/hub/posts/:id/reply', async (req, res) => {
             text: replyText,
             authorId: authorId,
             authorName: authorName,
-            repliedAt: FieldValue.serverTimestamp() // Server timestamp for when the reply was created
+            repliedAt: FieldValue.serverTimestamp()
         };
 
         const postRef = db.collection('hub_posts').doc(id);
 
-        // Check if a reply already exists
         const postDoc = await postRef.get();
         if (postDoc.exists && postDoc.data().reply) {
-            // Preventing overwriting. Change this if you want multiple replies.
             return res.status(409).json({ message: "This post already has a senior reply. Only one reply is allowed." });
         }
 
-        // Update the post document with the new reply object
         await postRef.update({ reply: replyObject });
 
         res.status(200).json({ message: "Reply added successfully.", reply: replyObject });
@@ -233,20 +258,55 @@ app.put('/api/hub/posts/:id/reply', async (req, res) => {
     }
 });
 
+// --- DELETE a Reply from a Post (Only the reply author can delete the reply) ---
+app.delete('/api/hub/posts/:id/reply', async (req, res) => {
+    if (!checkDbReady(res)) return;
+    try {
+        const { id } = req.params;
+        const { userId } = req.body;
+
+        if (!userId) {
+            return res.status(400).json({ message: "User ID is required for deletion." });
+        }
+
+        const postRef = db.collection('hub_posts').doc(id);
+        const doc = await postRef.get();
+
+        if (!doc.exists) {
+            return res.status(404).json({ message: "Post not found." });
+        }
+
+        const postData = doc.data();
+
+        if (!postData.reply) {
+            return res.status(404).json({ message: "No reply found to delete." });
+        }
+
+        // Security Check: Only the author of the REPLY can delete it
+        if (postData.reply.authorId !== userId) {
+            return res.status(403).json({ message: "You are not authorized to delete this reply." });
+        }
+
+        // Delete the reply by setting the field to null
+        await postRef.update({ reply: null });
+        res.status(200).json({ message: "Reply deleted successfully." });
+
+    } catch (error) {
+        console.error('Failed to delete reply:', error);
+        res.status(500).json({ error: 'Failed to delete reply.' });
+    }
+});
+
 
 // --- Progress Analyst Endpoint (Mock Data) ---
-// We'll leave this as mock, as a real AI call is complex.
 app.post('/api/progress', (req, res) => {
-    const { quizId, score, classAverage } = req.body;
-    console.log('Received progress data:', { quizId, score, classAverage });
-
     // In a real app, you would send this data to an AI to *generate* the plan.
-    // For the demo, we just return our mock analysis.
     res.json(mockAnalysis);
 });
 
 // --- Material Repository Endpoints (USING FIRESTORE) ---
 app.get('/api/materials', async (req, res) => {
+    if (!checkDbReady(res)) return;
     try {
         const snapshot = await db.collection('materials').orderBy('createdAt', 'desc').get();
         const materials = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -257,8 +317,9 @@ app.get('/api/materials', async (req, res) => {
     }
 });
 
-// --- UPDATED: Upload endpoint to accept the link and user IDs ---
+// --- Upload endpoint to accept the link and user IDs ---
 app.post('/api/materials/upload', async (req, res) => {
+    if (!checkDbReady(res)) return;
     try {
         const { course, title, category, link, authorId, authorName } = req.body;
         if (!course || !title || !category || !link || !authorId || !authorName) {
@@ -269,8 +330,8 @@ app.post('/api/materials/upload', async (req, res) => {
             course,
             title,
             category,
-            link, // The real link from the form
-            authorId, // So we know who can delete it
+            link,
+            authorId,
             authorName,
             createdAt: FieldValue.serverTimestamp()
         };
@@ -283,11 +344,12 @@ app.post('/api/materials/upload', async (req, res) => {
     }
 });
 
-// --- Delete endpoint ---
+// --- Delete material endpoint ---
 app.delete('/api/materials/:id', async (req, res) => {
+    if (!checkDbReady(res)) return;
     try {
         const { id } = req.params;
-        const { userId } = req.body; // Expecting userId in the request body for security
+        const { userId } = req.body;
 
         if (!userId) {
             return res.status(400).json({ message: "User ID is required for deletion." });
@@ -302,9 +364,8 @@ app.delete('/api/materials/:id', async (req, res) => {
 
         const data = doc.data();
 
-        // Security check: Only the author can delete their post (re-enabled and enforced)
+        // Security check: Only the author can delete their post
         if (data.authorId !== userId) {
-            console.warn(`Unauthorized attempt to delete material ${id}. User ID: ${userId}, Material Author ID: ${data.authorId}`);
             return res.status(403).json({ message: "You are not authorized to delete this material." });
         }
 
@@ -320,8 +381,9 @@ app.delete('/api/materials/:id', async (req, res) => {
 
 // --- Smart Study Groups Endpoints (USING FIRESTORE) ---
 
-// --- NEW: Endpoint to CREATE a new study group ---
+// --- Create a new study group ---
 app.post('/api/study-groups', async (req, res) => {
+    if (!checkDbReady(res)) return;
     const { name, description, capacity, creatorId } = req.body;
     if (!name || !description || !capacity || !creatorId) {
         return res.status(400).json({ message: 'Missing required fields.' });
@@ -348,6 +410,7 @@ app.post('/api/study-groups', async (req, res) => {
 
 
 app.get('/api/study-groups', async (req, res) => {
+    if (!checkDbReady(res)) return;
     try {
         const snapshot = await db.collection('study_groups').orderBy('createdAt', 'desc').get();
         const groups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -359,6 +422,7 @@ app.get('/api/study-groups', async (req, res) => {
 });
 
 app.post('/api/study-groups/join', async (req, res) => {
+    if (!checkDbReady(res)) return;
     const { groupId, userId } = req.body;
     if (!groupId || !userId) {
         return res.status(400).json({ message: 'Group ID and User ID are required.' });
@@ -400,18 +464,18 @@ app.post('/api/study-groups/join', async (req, res) => {
 
         res.json({
             message: 'Successfully joined the group!',
-            group: { id: groupRef.id, ...updatedGroup } // Send back the updated group
+            group: { id: groupRef.id, ...updatedGroup }
         });
 
     } catch (error) {
         console.error('Failed to join group:', error);
-        // Send back specific error messages (like "Group is full")
         res.status(400).json({ message: error.message || 'Failed to join group.' });
     }
 });
 
 // --- Get a single group's details (for chat header) ---
 app.get('/api/study-groups/:id', async (req, res) => {
+    if (!checkDbReady(res)) return;
     try {
         const { id } = req.params;
         const groupRef = db.collection('study_groups').doc(id);
@@ -430,6 +494,7 @@ app.get('/api/study-groups/:id', async (req, res) => {
 
 // --- Post a message to a group chat ---
 app.post('/api/study-groups/:id/messages', async (req, res) => {
+    if (!checkDbReady(res)) return;
     try {
         const { id } = req.params; // This is the groupId
         const { text, authorId, authorName } = req.body;
@@ -456,8 +521,10 @@ app.post('/api/study-groups/:id/messages', async (req, res) => {
     }
 });
 
+
 // --- Dashboard Summary Endpoint (NOW USING FIRESTORE) ---
 app.get('/api/dashboard-summary', async (req, res) => {
+    if (!checkDbReady(res)) return;
     try {
         // 1. Get the latest post from the Senior Hub
         const postSnapshot = await db.collection('hub_posts')
@@ -473,9 +540,8 @@ app.get('/api/dashboard-summary', async (req, res) => {
             .get();
         const latestMaterial = materialSnapshot.docs[0] ? { id: materialSnapshot.docs[0].id, ...materialSnapshot.docs[0].data() } : null;
 
-        // 3. Get an open study group
+        // 3. Get an open study group (this is more complex, so we'll just get the first one)
         const groupSnapshot = await db.collection('study_groups')
-            .orderBy('createdAt', 'desc')
             .limit(1)
             .get();
         const openGroup = groupSnapshot.docs[0] ? { id: groupSnapshot.docs[0].id, ...groupSnapshot.docs[0].data() } : null;
