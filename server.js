@@ -5,6 +5,7 @@ const fetch = require('node-fetch');
 // --- Firebase Admin Setup ---
 const admin = require('firebase-admin');
 // This assumes 'serviceAccountKey.json' is in the same directory
+// NOTE: Make sure this file exists in your setup!
 const serviceAccount = require('./serviceAccountKey.json');
 
 admin.initializeApp({
@@ -46,7 +47,7 @@ app.post('/api/solve', async (req, res) => {
     }
 
     // If the API key is still the placeholder, just send the mock response
-    if (!GEMINI_API_KEY || GEMINI_API_KEY === "PASTE_YOUR_GEMINI_API_KEY_HERE") {
+    if (!GEMINI_API_KEY || GEMINI_API_KEY === "AIzaSyA4CI4sCXO65h9LDtvR65ygDbFyiLvsb3M") {
         return res.json({
             answer: `This is a **mock answer** for: "${question}". \n\n The backend successfully received your question. To get a real answer, you need to: \n 1. Get a Gemini API key. \n 2. Paste it into 'server.js'. \n 3. Restart your server.\n\n ### Sample Formatted Answer:\n* **Point 1:** This is how lists look.\n* **Point 2:** And **bold text**.`
         });
@@ -141,14 +142,97 @@ app.post('/api/hub/posts', async (req, res) => {
         newPost.createdAt = FieldValue.serverTimestamp();
         newPost.reply = null; // Ensure reply is null on creation
 
-        const docRef = await db.collection('hub_posts').add(newPost);
+        // This ensures the new post object is stored correctly
+        const postToSave = {
+            course: newPost.course,
+            question: newPost.question,
+            authorId: newPost.authorId,
+            authorName: newPost.authorName,
+            createdAt: newPost.createdAt,
+            reply: null // Explicitly initialize the reply field
+        };
 
-        res.status(201).json({ id: docRef.id, ...newPost });
+        const docRef = await db.collection('hub_posts').add(postToSave);
+
+        res.status(201).json({ id: docRef.id, ...postToSave });
     } catch (error) {
         console.error('Failed to add post:', error);
         res.status(500).json({ error: 'Failed to add post.' });
     }
 });
+
+// --- NEW: DELETE a Post (DELETE Request) ---
+app.delete('/api/hub/posts/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { userId } = req.body; // Expecting userId in the request body for security
+
+        if (!userId) {
+            return res.status(400).json({ message: "User ID is required for deletion." });
+        }
+
+        const docRef = db.collection('hub_posts').doc(id);
+        const doc = await docRef.get();
+
+        if (!doc.exists) {
+            return res.status(404).json({ message: "Post not found." });
+        }
+
+        const data = doc.data();
+
+        // --- Security Check: Only the author can delete the post ---
+        if (data.authorId !== userId) {
+            console.warn(`Unauthorized attempt to delete post ${id}. User ID: ${userId}, Post Author ID: ${data.authorId}`);
+            return res.status(403).json({ message: "You are not authorized to delete this post." });
+        }
+
+        await docRef.delete();
+        res.status(200).json({ message: "Post deleted successfully." });
+
+    } catch (error) {
+        console.error('Failed to delete post:', error);
+        res.status(500).json({ error: 'Failed to delete post.' });
+    }
+});
+
+
+// --- Reply to a Post (PUT Request) ---
+app.put('/api/hub/posts/:id/reply', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { replyText, authorId, authorName } = req.body;
+
+        if (!replyText || !authorId || !authorName) {
+            return res.status(400).json({ message: "Missing required reply fields." });
+        }
+
+        const replyObject = {
+            text: replyText,
+            authorId: authorId,
+            authorName: authorName,
+            repliedAt: FieldValue.serverTimestamp() // Server timestamp for when the reply was created
+        };
+
+        const postRef = db.collection('hub_posts').doc(id);
+
+        // Check if a reply already exists
+        const postDoc = await postRef.get();
+        if (postDoc.exists && postDoc.data().reply) {
+            // Preventing overwriting. Change this if you want multiple replies.
+            return res.status(409).json({ message: "This post already has a senior reply. Only one reply is allowed." });
+        }
+
+        // Update the post document with the new reply object
+        await postRef.update({ reply: replyObject });
+
+        res.status(200).json({ message: "Reply added successfully.", reply: replyObject });
+
+    } catch (error) {
+        console.error('Failed to add reply:', error);
+        res.status(500).json({ error: 'Failed to add reply.' });
+    }
+});
+
 
 // --- Progress Analyst Endpoint (Mock Data) ---
 // We'll leave this as mock, as a real AI call is complex.
@@ -173,14 +257,21 @@ app.get('/api/materials', async (req, res) => {
     }
 });
 
+// --- UPDATED: Upload endpoint to accept the link and user IDs ---
 app.post('/api/materials/upload', async (req, res) => {
     try {
-        const { course, title, category } = req.body;
+        const { course, title, category, link, authorId, authorName } = req.body;
+        if (!course || !title || !category || !link || !authorId || !authorName) {
+            return res.status(400).json({ message: "Missing required fields." });
+        }
+
         const newMaterial = {
             course,
             title,
             category,
-            link: '#', // Placeholder link. In a real app, this would come from Firebase Storage.
+            link, // The real link from the form
+            authorId, // So we know who can delete it
+            authorName,
             createdAt: FieldValue.serverTimestamp()
         };
 
@@ -189,6 +280,40 @@ app.post('/api/materials/upload', async (req, res) => {
     } catch (error) {
         console.error('Failed to upload material:', error);
         res.status(500).json({ error: 'Failed to upload material.' });
+    }
+});
+
+// --- Delete endpoint ---
+app.delete('/api/materials/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { userId } = req.body; // Expecting userId in the request body for security
+
+        if (!userId) {
+            return res.status(400).json({ message: "User ID is required for deletion." });
+        }
+
+        const docRef = db.collection('materials').doc(id);
+        const doc = await docRef.get();
+
+        if (!doc.exists) {
+            return res.status(404).json({ message: "Material not found." });
+        }
+
+        const data = doc.data();
+
+        // Security check: Only the author can delete their post (re-enabled and enforced)
+        if (data.authorId !== userId) {
+            console.warn(`Unauthorized attempt to delete material ${id}. User ID: ${userId}, Material Author ID: ${data.authorId}`);
+            return res.status(403).json({ message: "You are not authorized to delete this material." });
+        }
+
+        await docRef.delete();
+        res.status(200).json({ message: "Material deleted successfully." });
+
+    } catch (error) {
+        console.error('Failed to delete material:', error);
+        res.status(500).json({ error: 'Failed to delete material.' });
     }
 });
 

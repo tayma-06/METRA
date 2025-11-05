@@ -1,26 +1,32 @@
-/* --- Global Settings --- */
+/* --- Global Settings (MODERNIZED PALETTE & SHADOWS) --- */
 :root {
-    --primary-color: #007aff; /* A cleaner, modern blue */
-    --light-blue: #e6f2ff;
-    --background-color: #f4f7f6; /* Off-white background */
+    --primary-color: #3b82f6; /* Modern Blue */
+    --primary-dark: #1e40af; /* Darker for hover */
+    --accent-color: #10b981; /* Green accent for success/reply */
+    --light-primary: #eff6ff; /* Soft primary background (blue-50) */
+    --background-color: #f8fafc; /* Very light background */
     --card-background: #ffffff;
-    --text-dark: #222222;
-    --text-light: #5f6368;
-    --border-color: #e0e0e0;
-    --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    --shadow-hover: 0 6px 16px rgba(0, 0, 0, 0.1);
+    --text-dark: #1f2937; /* High contrast dark text */
+    --text-light: #6b7280;
+    --border-color: #e5e7eb; /* Light border */
+    /* Deeper, modern shadow for lifted look */
+    --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-hover: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+    --radius-lg: 10px; /* Consistent corner radius */
 }
 
 body {
     margin: 0;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif; /* Use our new font */
+    'Helvetica Neue', Arial, sans-serif;
     background-color: var(--background-color);
     color: var(--text-dark);
+    line-height: 1.6;
 }
 
 * {
     box-sizing: border-box;
+    transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s, transform 0.2s;
 }
 
 /* --- 2. Main Layout & Navbar --- */
@@ -34,68 +40,108 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1.25rem 2.5rem;
+    padding: 1rem 2rem; /* Slightly reduced padding */
     background-color: var(--card-background);
     border-bottom: 1px solid var(--border-color);
     position: sticky;
     top: 0;
     z-index: 1000;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); /* Subtle header shadow */
 }
 
 .nav-brand {
-    font-size: 1.75rem;
-    font-weight: 700;
+    font-size: 1.85rem;
+    font-weight: 800; /* Bolder brand name */
     color: var(--primary-color);
     text-decoration: none;
 }
 
 .nav-links a {
-    margin: 0 1.25rem;
+    margin: 0 1rem;
     font-weight: 500;
     color: var(--text-light);
     text-decoration: none;
-    transition: color 0.2s;
+    padding: 0.5rem 0;
+    position: relative;
 }
 
 .nav-links a:hover {
     color: var(--primary-color);
 }
 
+.nav-links a::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background-color: var(--primary-color);
+    transition: width 0.3s ease;
+}
+
+.nav-links a:hover::after,
+.nav-links a.active::after {
+    width: 100%;
+}
+
 .nav-user {
     font-weight: 600;
     padding: 0;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     display: flex;
     align-items: center;
+    color: var(--text-dark);
 }
 
 /* --- 3. Main Content Area --- */
 .main-content {
     flex-grow: 1;
-    padding: 2.5rem;
+    padding: 2.5rem 1.5rem; /* Better mobile padding */
     max-width: 1200px;
     margin: 0 auto;
     width: 100%;
 }
 
 .subtitle {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     color: var(--text-light);
-    margin-bottom: 2rem;
+    margin-bottom: 2.5rem;
     font-weight: 400;
 }
 
 .page-container {
     background-color: var(--card-background);
-    padding: 2.5rem;
-    border-radius: 12px;
-    box-shadow: var(--shadow);
+    padding: 2rem;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow); /* Apply new deep shadow */
+}
+
+h2 {
+    font-size: 2.25rem;
+    font-weight: 800;
+    color: var(--text-dark);
+    margin-bottom: 1rem;
+}
+
+h3 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+}
+
+h4 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-dark);
 }
 
 /* --- 4. Dashboard Grid --- */
 .dashboard-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 1.5rem;
 }
 
@@ -103,52 +149,48 @@ body {
     display: block;
     background-color: var(--card-background);
     border: 1px solid var(--border-color);
-    border-radius: 12px; /* More rounded corners */
-    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    padding: 1.75rem;
     color: var(--text-dark);
     text-decoration: none;
     box-shadow: var(--shadow);
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
 }
 
 .dashboard-card:hover {
-    transform: translateY(-5px);
+    transform: translateY(-8px);
     box-shadow: var(--shadow-hover);
+    border-color: var(--primary-color);
 }
 
 .dashboard-card h3 {
     margin-top: 0;
     color: var(--primary-color);
-    font-size: 1.15rem;
-    font-weight: 600;
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
 }
 
 .dashboard-card p {
-    font-size: 0.95rem;
+    font-size: 1rem;
     color: var(--text-light);
     line-height: 1.5;
 }
 
 /* --- 5. AI Solver Chat --- */
 .chat-box {
-    background-color: var(--background-color);
+    background-color: var(--light-primary);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     padding: 1.5rem;
-    min-height: 200px;
-    margin-bottom: 1rem;
+    min-height: 250px; /* Increased height */
+    margin-bottom: 1.5rem;
     line-height: 1.6;
+    overflow-y: auto;
 }
 
 .chat-answer p {
-    margin: 0 0 0.5rem 0;
-}
-.chat-answer ol {
-    margin: 0.5rem 0;
-    padding-left: 20px;
-}
-.chat-answer strong {
-    color: var(--primary-color);
+    margin: 0 0 0.8rem 0;
 }
 
 .chat-form {
@@ -158,11 +200,11 @@ body {
 .chat-form input[type='text'],
 input[type='text'].search-bar {
     flex-grow: 1;
-    padding: 0.85rem 1rem;
+    padding: 1rem 1.25rem;
     font-size: 1rem;
     font-family: 'Inter', sans-serif;
-    border: 1px solid #ccc;
-    border-radius: 8px 0 0 8px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
@@ -170,26 +212,62 @@ input[type='text'].search-bar {
 input[type='text'].search-bar:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px var(--light-blue);
+    box-shadow: 0 0 0 3px var(--light-primary);
 }
 
 .chat-form button,
 button {
-    padding: 0.85rem 1.75rem;
+    padding: 1rem 1.75rem;
     font-size: 1rem;
     font-weight: 600;
     font-family: 'Inter', sans-serif;
     background-color: var(--primary-color);
     color: white;
     border: none;
-    border-radius: 0 8px 8px 0;
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
     cursor: pointer;
-    transition: background-color 0.2s;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: background-color 0.3s, transform 0.1s;
 }
 
 .chat-form button:hover,
 button:hover {
-    background-color: #0056b3; /* Darker blue on hover */
+    background-color: var(--primary-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+}
+
+.chat-form button:active,
+button:active {
+    transform: translateY(0);
+}
+
+/* General button style update for all isolated buttons */
+button:not(.chat-form button) {
+    border-radius: var(--radius-lg);
+    padding: 0.75rem 1.5rem;
+    background-color: var(--primary-color);
+    color: white;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Secondary/outline button style for Delete Post */
+.delete-button { /* Changed from button.delete-button */
+    background-color: transparent !important;
+    color: #ef4444 !important; /* Red */
+    border: 2px solid #ef4444 !important;
+    box-shadow: none !important;
+    padding: 0.5rem 1rem !important; /* Smaller size for card use */
+    font-size: 0.9rem !important;
+    border-radius: var(--radius-lg) !important;
+}
+.delete-button:hover {
+    background-color: #fee2e2 !important; /* Light red background */
+    color: #b91c1c !important; /* Darker red text */
+    transform: none !important;
 }
 
 /* --- 6. Progress Analytics & Forms --- */
@@ -199,27 +277,27 @@ button:hover {
     gap: 1.5rem;
 }
 
-.analytics-card {
+/* Renamed to simply 'card' for reusable containers */
+.card {
     background-color: var(--card-background);
     border: 1px solid var(--border-color);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     padding: 1.5rem;
     box-shadow: var(--shadow);
 }
 
-.analytics-card h4 {
-    font-weight: 600;
+.card h4 {
+    font-weight: 700;
     border-bottom: 1px solid var(--border-color);
     padding-bottom: 0.75rem;
     margin-top: 0;
-}
-
-.analytics-card li {
-    margin-bottom: 0.5rem;
-    color: var(--text-light);
+    color: var(--primary-color);
 }
 
 /* Re-usable form styles */
+.review-form {
+    padding-top: 1rem;
+}
 .review-form .form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -236,181 +314,193 @@ button:hover {
     padding: 0.85rem 1rem;
     font-size: 1rem;
     font-family: 'Inter', sans-serif;
-    border: 1px solid #ccc;
-    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
     transition: border-color 0.2s, box-shadow 0.2s;
     background-color: #fff;
 }
 .review-form textarea {
-    min-height: 100px;
+    min-height: 120px;
     margin-bottom: 1rem;
 }
-.review-form select {
-    margin-bottom: 1rem;
-}
-.review-form button {
-    width: 100%;
-    border-radius: 8px;
-}
+
 .review-form input:focus,
 .review-form select:focus,
 .review-form textarea:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px var(--light-blue);
+    box-shadow: 0 0 0 3px var(--light-primary);
 }
 
-/* --- 7. Senior Hub Forum --- */
-.forum-post-box textarea {
-    width: 100%;
-    min-height: 80px;
-    padding: 0.75rem 1rem;
-    font-family: 'Inter', sans-serif;
+/* --- Media Query for Mobile Forms --- */
+@media (max-width: 640px) {
+    .review-form .form-row {
+        grid-template-columns: 1fr; /* Stack columns on small screens */
+    }
+    .main-content {
+        padding: 1.5rem 1rem;
+    }
+}
+
+/* --- 7. Senior Hub Forum Specific Styles (REVIEW CARD) --- */
+.forum-section {
+    max-width: 800px; /* Constrain the main content width for readability */
+    margin: 0 auto;
+}
+.reviews-list {
+    margin-top: 1.5rem;
+}
+.review-card {
+    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    background-color: var(--card-background);
+}
+
+.post-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.post-course-tag {
     font-size: 1rem;
-    border: 1px solid #ccc;
-    border-radius: 8px;
+    font-weight: 700;
+    color: var(--primary-color);
+    background-color: var(--light-primary);
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    display: inline-block;
+}
+
+.post-question {
+    font-size: 1.15rem;
+    font-weight: 500;
+    color: var(--text-dark);
+    margin: 0.75rem 0;
+}
+
+.post-meta {
+    font-size: 0.85rem;
+    color: var(--text-light);
+}
+.post-meta strong {
+    font-weight: 600;
+    color: var(--text-dark);
+}
+
+
+/* Reply Display (Mentor Response) */
+.mentor-reply-box {
+    margin-top: 1rem;
+    padding: 1.25rem;
+    border-left: 5px solid var(--accent-color); /* Strong indicator */
+    background-color: #f0fff4; /* Soft green background */
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+    box-shadow: inset 0 0 5px rgba(16, 185, 129, 0.1);
+}
+.mentor-reply-box .reply-header {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent-color);
+    margin-bottom: 0.5rem;
+}
+.mentor-reply-box .reply-text {
+    color: var(--text-dark);
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+}
+.mentor-reply-box .reply-meta {
+    font-size: 0.75rem;
+    color: #4b5563;
+    border-top: 1px solid #d1fae5;
+    padding-top: 0.5rem;
+}
+
+/* Reply Form */
+.reply-form-container {
+    background-color: var(--light-primary);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid #dbeafe; /* Soft border */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+.reply-form-container h5 {
+    color: var(--primary-color);
+    border-bottom: 1px solid #bfdbfe;
+    padding-bottom: 0.5rem;
     margin-bottom: 1rem;
 }
-/* Re-use the focus style from the text input */
-.forum-post-box textarea:focus {
-    outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px var(--light-blue);
+.reply-form-container textarea {
+    min-height: 100px;
+    border-radius: var(--radius-lg);
 }
-
-.forum-feed .forum-post h4 {
-    margin-top: 0;
-}
-.forum-feed .forum-post h4 a {
+.reply-form-container .flex button:first-child {
+    /* Cancel button */
+    background-color: #e5e7eb;
     color: var(--text-dark);
-    text-decoration: none;
+    box-shadow: none;
+    transition: background-color 0.2s;
 }
-.forum-feed .forum-post h4 a:hover {
-    color: var(--primary-color);
-    text-decoration: underline;
-}
-
-.forum-answer {
-    border-top: 1px dashed #ccc;
-    margin-top: 1rem;
-    padding-top: 1rem;
-    background-color: var(--light-blue);
-    padding: 1rem;
-    border-radius: 4px;
+.reply-form-container .flex button:first-child:hover {
+    background-color: #d1d5db;
+    transform: none;
 }
 
-.forum-answer p {
-    margin: 0;
-}
 
 /* --- 8. AI Response Formatting (.prose) --- */
-/* This styles the HTML output from the 'marked' library */
+/* The styles were already good, just updating colors */
 .prose {
     line-height: 1.6;
 }
-.prose h1,
-.prose h2,
-.prose h3 {
-    color: var(--text-dark);
-    margin-top: 1.5rem;
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-}
 .prose h2 {
-    font-size: 1.25rem;
+    color: var(--primary-color);
     border-bottom: 1px solid var(--border-color);
-    padding-bottom: 0.25rem;
-}
-.prose h3 {
-    font-size: 1.1rem;
-}
-.prose p {
-    margin-bottom: 1rem;
-}
-.prose ul,
-.prose ol {
-    margin-bottom: 1rem;
-    padding-left: 1.5rem;
-}
-.prose li {
-    margin-bottom: 0.5rem;
 }
 .prose strong {
     color: var(--primary-color);
-    font-weight: 600;
+    font-weight: 700;
 }
 .prose code {
-    background-color: var(--light-blue);
-    color: var(--primary-color);
-    padding: 0.2rem 0.4rem;
-    border-radius: 4px;
-    font-family: 'Courier New', Courier, monospace;
-}
-.prose pre {
-    background-color: #f5f5f5;
-    padding: 1rem;
-    border-radius: 8px;
-    overflow-x: auto;
+    background-color: var(--light-primary);
+    color: var(--primary-dark);
 }
 
 /* --- 9. NEW: Study Group Chat Styles --- */
-/* We make the page container fill the height */
+/* (Keeping these original styles, just using the new variables) */
 .chat-page-container {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 160px); /* Full height minus navbar/padding */
+    /* Adjust height calculation for full screen effect */
+    height: calc(100vh - 4rem);
     max-width: 900px;
-    margin: 2rem auto;
-}
-
-.chat-header {
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 1rem;
-}
-.chat-header h2 {
-    margin-top: 0.5rem;
-    margin-bottom: 0.5rem;
-}
-.chat-header p {
-    margin: 0;
-    color: var(--text-light);
+    margin: 0 auto;
+    padding: 2rem 0;
 }
 
 .chat-messages {
-    flex-grow: 1; /* This makes the chat area fill the space */
-    overflow-y: auto; /* Adds a scrollbar when needed */
-    padding: 1.5rem 0.5rem;
-    background-color: var(--background-color);
-    border-radius: 8px;
-    margin-top: 1rem;
+    background-color: var(--light-primary);
+    border-radius: var(--radius-lg);
+    border: 1px solid #bfdbfe;
+    padding: 1.5rem 1rem;
 }
 
 .chat-message {
     background-color: var(--card-background);
-    padding: 0.75rem 1.25rem;
-    border-radius: 12px;
-    margin-bottom: 1rem;
-    max-width: 75%;
-    width: fit-content;
-    box-shadow: var(--shadow);
+    border-radius: var(--radius-lg);
+    max-width: 80%; /* Increased max width */
 }
 .chat-message strong {
     color: var(--primary-color);
-    display: block;
-    margin-bottom: 0.25rem;
-    font-size: 0.85rem;
-}
-.chat-message p {
-    margin: 0;
+    font-weight: 700;
 }
 
 .chat-message.own-message {
     background-color: var(--primary-color);
     color: white;
-    margin-left: auto; /* Aligns to the right */
 }
 .chat-message.own-message strong {
     color: white;
 }
-
-/* The chat form is already styled by .chat-form */
