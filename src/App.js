@@ -10,20 +10,19 @@ import StudyGroups from './components/StudyGroups';
 import AISolver from './components/AISolver';
 import ProgressAnalytics from './components/ProgressAnalytics';
 import MaterialRepository from './components/MaterialRepository';
-import Login from './components/Login'; // 2. Import new pages
+import Login from './components/Login';
 import Signup from './components/Signup';
 import Profile from './components/Profile';
+import StudyGroupChat from './components/StudyGroupChat'; // 1. Import the new Chat component
 import './styles.css';
 
-// 3. --- Create a Protected Route component ---
-// This component checks if a user is logged in.
-// If not, it redirects them to the /login page.
+// --- Create a Protected Route component ---
 const ProtectedRoute = () => {
     const { currentUser } = useAuth();
     return currentUser ? <Outlet /> : <Navigate to="/login" replace />;
 };
 
-// 4. --- Update the Layout ---
+// --- Update the Layout ---
 const AppLayout = () => {
     const { currentUser } = useAuth(); // Get the current user
 
@@ -35,7 +34,6 @@ const AppLayout = () => {
                     {/* Only show main links if logged in */}
                     {currentUser && (
                         <>
-                            <Link to="/">Dashboard</Link> {/* Added Dashboard link */}
                             <Link to="/reviews">Course Reviews</Link>
                             <Link to="/hub">Senior Hub</Link>
                             <Link to="/groups">Study Groups</Link>
@@ -46,11 +44,12 @@ const AppLayout = () => {
                     )}
                 </div>
 
-                {/* 5. Show Profile or Login/Signup based on auth state */}
+                {/* Show Profile or Login/Signup based on auth state */}
                 <div className="nav-user">
                     {currentUser ? (
-                        <Link to="/profile" style={{backgroundColor: '#e6f2ff', color: '#007aff', padding: '0.5rem 1rem', borderRadius: '20px', textDecoration: 'none'}}>
-                            Profile
+                        // Show the user's name instead of just "Profile"
+                        <Link to="/profile" style={{backgroundColor: '#e6f2ff', color: '#007aff', padding: '0.5rem 1rem', borderRadius: '20px', textDecoration: 'none', fontWeight: '500'}}>
+                            {currentUser.displayName || 'My Profile'}
                         </Link>
                     ) : (
                         <>
@@ -69,7 +68,7 @@ const AppLayout = () => {
     );
 };
 
-// 6. --- Update the App's Routes ---
+// --- Update the App's Routes ---
 function App() {
     return (
         <Router>
@@ -82,12 +81,13 @@ function App() {
                     <Route path="signup" element={<Signup />} />
 
                     {/* --- Protected Routes --- */}
-                    {/* We wrap all protected pages inside our new <ProtectedRoute> */}
                     <Route element={<ProtectedRoute />}>
                         <Route index element={<Dashboard />} />
                         <Route path="reviews" element={<CourseReviews />} />
                         <Route path="hub" element={<SeniorHub />} />
                         <Route path="groups" element={<StudyGroups />} />
+                        {/* 2. Add the new route. :groupId is a dynamic parameter */}
+                        <Route path="groups/:groupId" element={<StudyGroupChat />} />
                         <Route path="solver" element={<AISolver />} />
                         <Route path="progress" element={<ProgressAnalytics />} />
                         <Route path="materials" element={<MaterialRepository />} />

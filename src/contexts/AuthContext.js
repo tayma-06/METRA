@@ -1,11 +1,16 @@
 import React, { useContext, useState, useEffect } from 'react';
-import { auth } from '../firebase'; // Import from your new firebase.js
+// 1. Import db from our firebase config
+import { auth, db } from '../firebase';
 import {
     onAuthStateChanged,
     createUserWithEmailAndPassword,
+    updateProfile,
+    // --- I've added the two missing functions here ---
     signInWithEmailAndPassword,
     signOut
 } from "firebase/auth";
+// 2. Import Firestore doc/setDoc functions
+import { doc, setDoc } from "firebase/firestore";
 
 // 1. Create the Context
 const AuthContext = React.createContext();
@@ -22,9 +27,36 @@ export function AuthProvider({ children }) {
 
     // --- Auth Functions ---
 
-    function signup(email, password) {
-        // This returns a promise
-        return createUserWithEmailAndPassword(auth, email, password);
+    // --- 3. Update the signup function ---
+    async function signup(email, password, displayName, role) {
+        // 1. Create the user in Firebase Auth
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // 2. Update their Auth profile (this just stores displayName)
+        await updateProfile(user, {
+            displayName: displayName
+        });
+
+        // 3. --- CREATE USER DOCUMENT IN FIRESTORE ---
+        // This is the new, better way to store profile data
+        const userRef = doc(db, "users", user.uid); // Create a reference
+        await setDoc(userRef, {
+            uid: user.uid,
+            email: email,
+            displayName: displayName,
+            role: role,
+            createdAt: new Date()
+        });
+        // --- End Firestore Update ---
+
+        // 4. Manually set currentUser to include new profile data
+        setCurrentUser({
+            ...user,
+            displayName: displayName
+        });
+
+        return userCredential;
     }
 
     function login(email, password) {

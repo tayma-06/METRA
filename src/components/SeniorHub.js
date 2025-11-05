@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext'; // 1. Import useAuth
 
 // This is the URL of your backend server
 const BACKEND_URL = 'http://localhost:8000';
@@ -11,6 +12,8 @@ function SeniorHub() {
     // --- State for the new post form ---
     const [newQuestion, setNewQuestion] = useState('');
     const [formError, setFormError] = useState('');
+
+    const { currentUser } = useAuth(); // 2. Get the current user
 
     // 1. --- FETCH ALL POSTS (GET Request) ---
     useEffect(() => {
@@ -44,13 +47,15 @@ function SeniorHub() {
         }
 
         try {
-            // For the demo, we'll hard-code the author
-            const author = "Ayesha (2nd Year)";
+            // 3. --- USE THE REAL USER'S NAME & ID ---
+            const author = currentUser.displayName || currentUser.email;
+            const authorId = currentUser.uid; // Get the unique ID
 
             const response = await fetch(`${BACKEND_URL}/api/hub/posts`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ author, question: newQuestion }),
+                // 4. Send the new authorId to the backend
+                body: JSON.stringify({ author, authorId, question: newQuestion }),
             });
 
             if (!response.ok) {
@@ -93,8 +98,6 @@ function SeniorHub() {
             <div className="forum-feed">
                 {isLoading && <p>Loading posts...</p>}
                 {error && <p style={{ color: 'red' }}>{error}</p>}
-
-                {posts.length === 0 && !isLoading && <p>No posts yet. Be the first!</p>}
 
                 {posts.map((post) => (
                     <div key={post.id} className="forum-post analytics-card" style={{marginBottom: '1.5rem'}}>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext'; // 1. Import useAuth
 
 // This is the URL of your backend server
 const BACKEND_URL = 'http://localhost:8000';
@@ -15,8 +16,9 @@ function CourseReviews() {
     const [comment, setComment] = useState('');
     const [formError, setFormError] = useState('');
 
+    const { currentUser } = useAuth(); // 2. Get the current user
+
     // 1. --- FETCH ALL REVIEWS (GET Request) ---
-    // We use useEffect to fetch data as soon as the component loads
     useEffect(() => {
         const fetchReviews = async () => {
             setIsLoading(true);
@@ -48,10 +50,15 @@ function CourseReviews() {
         }
 
         try {
+            // 3. --- ADD THE AUTHOR'S NAME & ID ---
+            const author = currentUser.displayName || currentUser.email;
+            const authorId = currentUser.uid; // Get the unique ID
+
             const response = await fetch(`${BACKEND_URL}/api/reviews`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ course, professor, rating, comment }),
+                // 4. Send the new authorId to the backend
+                body: JSON.stringify({ course, professor, rating, comment, author, authorId }),
             });
 
             if (!response.ok) {
@@ -129,6 +136,10 @@ function CourseReviews() {
                         <h4>{review.course} - <span>{review.professor}</span></h4>
                         <div className="review-rating">{Array(review.rating).fill('★').join('')}{Array(5 - review.rating).fill('☆').join('')}</div>
                         <p>{review.comment}</p>
+                        {/* 4. --- SHOW THE AUTHOR --- */}
+                        <p style={{fontSize: '0.9rem', color: '#5f6368', borderTop: '1px dashed #eee', paddingTop: '10px', marginTop: '10px'}}>
+                            Posted by: {review.author || 'Anonymous'}
+                        </p>
                     </div>
                 ))}
             </div>

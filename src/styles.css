@@ -1,6 +1,4 @@
-/* src/styles.css */
-
-/* --- 1. Global Settings & Font --- */
+/* --- Global Settings --- */
 :root {
     --primary-color: #007aff; /* A cleaner, modern blue */
     --light-blue: #e6f2ff;
@@ -65,11 +63,10 @@ body {
 
 .nav-user {
     font-weight: 600;
-    padding: 0.5rem 1rem;
-    background-color: var(--light-blue);
-    color: var(--primary-color);
-    border-radius: 20px;
+    padding: 0;
     font-size: 0.9rem;
+    display: flex;
+    align-items: center;
 }
 
 /* --- 3. Main Content Area --- */
@@ -195,7 +192,7 @@ button:hover {
     background-color: #0056b3; /* Darker blue on hover */
 }
 
-/* --- 6. Progress Analytics --- */
+/* --- 6. Progress Analytics & Forms --- */
 .analytics-container {
     display: grid;
     grid-template-columns: 1fr 2fr;
@@ -222,6 +219,47 @@ button:hover {
     color: var(--text-light);
 }
 
+/* Re-usable form styles */
+.review-form .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.review-form input[type="text"],
+.review-form input[type="number"],
+.review-form input[type="email"],
+.review-form input[type="password"],
+.review-form select,
+.review-form textarea {
+    width: 100%;
+    padding: 0.85rem 1rem;
+    font-size: 1rem;
+    font-family: 'Inter', sans-serif;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    background-color: #fff;
+}
+.review-form textarea {
+    min-height: 100px;
+    margin-bottom: 1rem;
+}
+.review-form select {
+    margin-bottom: 1rem;
+}
+.review-form button {
+    width: 100%;
+    border-radius: 8px;
+}
+.review-form input:focus,
+.review-form select:focus,
+.review-form textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px var(--light-blue);
+}
+
 /* --- 7. Senior Hub Forum --- */
 .forum-post-box textarea {
     width: 100%;
@@ -240,29 +278,14 @@ button:hover {
     box-shadow: 0 0 0 3px var(--light-blue);
 }
 
-/* Make button full-width */
-.forum-post-box button {
-    width: 100%;
-    border-radius: 8px;
-}
-
-.forum-feed .forum-post {
-    background-color: var(--card-background);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 1.5rem;
-    margin-bottom: 1rem;
-    box-shadow: var(--shadow);
-}
-
-.forum-post h4 {
+.forum-feed .forum-post h4 {
     margin-top: 0;
 }
-.forum-post h4 a {
+.forum-feed .forum-post h4 a {
     color: var(--text-dark);
     text-decoration: none;
 }
-.forum-post h4 a:hover {
+.forum-feed .forum-post h4 a:hover {
     color: var(--primary-color);
     text-decoration: underline;
 }
@@ -279,3 +302,115 @@ button:hover {
 .forum-answer p {
     margin: 0;
 }
+
+/* --- 8. AI Response Formatting (.prose) --- */
+/* This styles the HTML output from the 'marked' library */
+.prose {
+    line-height: 1.6;
+}
+.prose h1,
+.prose h2,
+.prose h3 {
+    color: var(--text-dark);
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+.prose h2 {
+    font-size: 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.25rem;
+}
+.prose h3 {
+    font-size: 1.1rem;
+}
+.prose p {
+    margin-bottom: 1rem;
+}
+.prose ul,
+.prose ol {
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+}
+.prose li {
+    margin-bottom: 0.5rem;
+}
+.prose strong {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+.prose code {
+    background-color: var(--light-blue);
+    color: var(--primary-color);
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-family: 'Courier New', Courier, monospace;
+}
+.prose pre {
+    background-color: #f5f5f5;
+    padding: 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+}
+
+/* --- 9. NEW: Study Group Chat Styles --- */
+/* We make the page container fill the height */
+.chat-page-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 160px); /* Full height minus navbar/padding */
+    max-width: 900px;
+    margin: 2rem auto;
+}
+
+.chat-header {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+}
+.chat-header h2 {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+.chat-header p {
+    margin: 0;
+    color: var(--text-light);
+}
+
+.chat-messages {
+    flex-grow: 1; /* This makes the chat area fill the space */
+    overflow-y: auto; /* Adds a scrollbar when needed */
+    padding: 1.5rem 0.5rem;
+    background-color: var(--background-color);
+    border-radius: 8px;
+    margin-top: 1rem;
+}
+
+.chat-message {
+    background-color: var(--card-background);
+    padding: 0.75rem 1.25rem;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+    max-width: 75%;
+    width: fit-content;
+    box-shadow: var(--shadow);
+}
+.chat-message strong {
+    color: var(--primary-color);
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.85rem;
+}
+.chat-message p {
+    margin: 0;
+}
+
+.chat-message.own-message {
+    background-color: var(--primary-color);
+    color: white;
+    margin-left: auto; /* Aligns to the right */
+}
+.chat-message.own-message strong {
+    color: white;
+}
+
+/* The chat form is already styled by .chat-form */

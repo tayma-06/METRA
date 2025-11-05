@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext'; // 1. Import useAuth
 
 // This is the URL of your backend server
 const BACKEND_URL = 'http://localhost:8000';
@@ -7,6 +8,7 @@ const BACKEND_URL = 'http://localhost:8000';
 function Dashboard() {
     const [summary, setSummary] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const { currentUser } = useAuth(); // 2. Get the current logged-in user
 
     // --- FETCH DASHBOARD SUMMARY (GET Request) ---
     useEffect(() => {
@@ -31,7 +33,9 @@ function Dashboard() {
 
     return (
         <div className="dashboard">
-            <h2>Welcome back, Ayesha!</h2>
+            {/* 3. --- THIS IS THE REFINEMENT --- */}
+            {/* We use the user's actual displayName */}
+            <h2>Welcome back, {currentUser?.displayName || 'Student'}!</h2>
             <p className="subtitle">Your integrated academic partner. What do you need help with today?</p>
 
             {/* --- Section 1: Dynamic Summary Cards --- */}
