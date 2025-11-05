@@ -19,9 +19,10 @@ app.use(express.json()); // Middleware to parse JSON bodies
 app.use(cors()); // Middleware to allow cross-origin requests
 
 const PORT = process.env.PORT || 8000;
-const GEMINI_API_KEY = "PASTE_YOUR_GEMINI_API_KEY_HERE"; // TODO: Add your API key
+// Make sure to paste your real API key here
+const GEMINI_API_KEY = "AIzaSyA4CI4sCXO65h9LDtvR65ygDbFyiLvsb3M";
 
-// --- Mock Data for features NOT yet in Firestore ---
+// --- Mock Data for Progress Analyst ---
 const mockAnalysis = {
     title: "Personalized Plan for Quiz 3",
     summary: "Your score was 72%, just below the class average of 78%. Analysis shows strong performance in basic data structures, but weaknesses in Dynamic Programming.",
@@ -43,7 +44,6 @@ app.post('/api/solve', async (req, res) => {
         return res.status(400).json({ error: 'Question is required.' });
     }
 
-    // If the API key is still the placeholder, just send the mock response
     if (!GEMINI_API_KEY || GEMINI_API_KEY === "PASTE_YOUR_GEMINI_API_KEY_HERE") {
         return res.json({
             answer: `This is a mock answer for: **"${question}"**. \n\n The backend successfully received your question. To get a real answer, you need to: \n 1. Get a Gemini API key. \n 2. Paste it into 'server.js'. \n 3. Restart your server.`
@@ -52,11 +52,15 @@ app.post('/api/solve', async (req, res) => {
 
     // --- REAL GEMINI API CALL ---
     try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+        // We use the correct model name
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`;
+
+        // We add the instruction for Markdown formatting
+        const prompt = `Please answer the following question. Use Markdown for formatting (e.g., ## Headings, **bold**, *italics*, and - lists).\n\nQuestion: ${question}`;
 
         const payload = {
             contents: [{
-                parts: [{ text: question }]
+                parts: [{ text: prompt }]
             }]
         };
 
@@ -72,14 +76,18 @@ app.post('/api/solve', async (req, res) => {
         }
 
         const data = await apiRes.json();
-        const text = data.candidates[0].content.parts[0].text;
-        res.json({ answer: text });
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (text) {
+            res.json({ answer: text });
+        } else {
+            res.json({ answer: "I'm sorry, I can't provide a response to that. Please try a different question." });
+        }
 
     } catch (error) {
         console.error('Gemini API error:', error);
         res.status(500).json({ error: 'Failed to get answer from AI. ' + error.message });
     }
-
 });
 
 // --- Course Reviews Endpoints (USING FIRESTORE) ---
@@ -97,11 +105,8 @@ app.get('/api/reviews', async (req, res) => {
 app.post('/api/reviews', async (req, res) => {
     try {
         const newReview = req.body;
-        // Add a server-side timestamp
         newReview.createdAt = admin.firestore.FieldValue.serverTimestamp();
-
         const docRef = await db.collection('reviews').add(newReview);
-
         res.status(201).json({ id: docRef.id, ...newReview });
     } catch (error) {
         console.error('Failed to add review:', error);
@@ -126,10 +131,8 @@ app.post('/api/hub/posts', async (req, res) => {
     try {
         const newPost = req.body;
         newPost.createdAt = admin.firestore.FieldValue.serverTimestamp();
-        newPost.reply = null; // Ensure reply is null on creation
-
+        newPost.reply = null;
         const docRef = await db.collection('hub_posts').add(newPost);
-
         res.status(201).json({ id: docRef.id, ...newPost });
     } catch (error) {
         console.error('Failed to add post:', error);
@@ -138,13 +141,9 @@ app.post('/api/hub/posts', async (req, res) => {
 });
 
 // --- Progress Analyst Endpoint (Mock Data) ---
-// We'll leave this as mock, as a real AI call is complex.
 app.post('/api/progress', (req, res) => {
     const { quizId, score, classAverage } = req.body;
     console.log('Received progress data:', { quizId, score, classAverage });
-
-    // In a real app, you would send this data to an AI to *generate* the plan.
-    // For the demo, we just return our mock analysis.
     res.json(mockAnalysis);
 });
 
@@ -167,10 +166,9 @@ app.post('/api/materials/upload', async (req, res) => {
             course,
             title,
             category,
-            link: '#', // Placeholder link. In a real app, this would come from Firebase Storage.
+            link: '#', // Placeholder link
             createdAt: admin.firestore.FieldValue.serverTimestamp()
         };
-
         const docRef = await db.collection('materials').add(newMaterial);
         res.status(201).json({ id: docRef.id, ...newMaterial });
     } catch (error) {
@@ -197,34 +195,25 @@ app.post('/api/study-groups/join', async (req, res) => {
     const groupRef = db.collection('study_groups').doc(groupId);
 
     try {
-        // Use a transaction to safely update the group
         const updatedGroup = await db.runTransaction(async (transaction) => {
             const groupDoc = await transaction.get(groupRef);
             if (!groupDoc.exists) {
                 throw new Error("Group not found.");
             }
-
             const groupData = groupDoc.data();
             if (groupData.members >= groupData.capacity) {
                 throw new Error("This group is already full.");
             }
-
-            // Increment the member count
             const newMemberCount = groupData.members + 1;
             transaction.update(groupRef, { members: newMemberCount });
-
-            // Return the updated data
             return { ...groupData, members: newMemberCount };
         });
-
         res.json({
             message: 'Successfully joined the group!',
-            group: { id: groupRef.id, ...updatedGroup } // Send back the updated group
+            group: { id: groupRef.id, ...updatedGroup }
         });
-
     } catch (error) {
         console.error('Failed to join group:', error);
-        // Send back specific error messages (like "Group is full")
         res.status(400).json({ message: error.message || 'Failed to join group.' });
     }
 });
@@ -233,22 +222,18 @@ app.post('/api/study-groups/join', async (req, res) => {
 // --- Dashboard Summary Endpoint (NOW USING FIRESTORE) ---
 app.get('/api/dashboard-summary', async (req, res) => {
     try {
-        // 1. Get the latest post from the Senior Hub
         const postSnapshot = await db.collection('hub_posts')
             .orderBy('createdAt', 'desc')
             .limit(1)
             .get();
         const latestPost = postSnapshot.docs[0] ? { id: postSnapshot.docs[0].id, ...postSnapshot.docs[0].data() } : null;
 
-        // 2. Get the latest material
         const materialSnapshot = await db.collection('materials')
             .orderBy('createdAt', 'desc')
             .limit(1)
             .get();
         const latestMaterial = materialSnapshot.docs[0] ? { id: materialSnapshot.docs[0].id, ...materialSnapshot.docs[0].data() } : null;
 
-        // 3. Get an open study group (this is more complex, so we'll just get the first one)
-        // A better query would be: .where('members', '<', 'capacity')
         const groupSnapshot = await db.collection('study_groups')
             .limit(1)
             .get();
@@ -259,7 +244,6 @@ app.get('/api/dashboard-summary', async (req, res) => {
             latestMaterial,
             openGroup
         });
-
     } catch (error) {
         console.error('Failed to fetch dashboard summary:', error);
         res.status(500).json({ error: 'Failed to fetch dashboard summary.' });
