@@ -402,6 +402,706 @@ button:hover {
 }
 .chat-message p {
     margin: 0;
+}/* --- Global Settings --- */
+:root {
+    --primary-color: #007aff; /* A cleaner, modern blue */
+    --light-blue: #e6f2ff;
+    --background-color: #f4f7f6; /* Off-white background */
+    --card-background: #ffffff;
+    --text-dark: #222222;
+    --text-light: #5f6368;
+    --border-color: #e0e0e0;
+    --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    --shadow-hover: 0 6px 16px rgba(0, 0, 0, 0.1);
+    --success-color: #00a859;
+    --warning-color: #ff9500;
+    --error-color: #ff3b30;
+}
+
+body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-dark);
+    line-height: 1.6;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+/* --- 2. Main Layout & Navbar --- */
+.App {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 2.5rem;
+    background-color: var(--card-background);
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    backdrop-filter: blur(10px);
+}
+
+.nav-brand {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.nav-links {
+    display: flex;
+    gap: 1.25rem;
+}
+
+.nav-links a {
+    font-weight: 500;
+    color: var(--text-light);
+    text-decoration: none;
+    transition: color 0.2s;
+    padding: 0.5rem 0;
+    position: relative;
+}
+
+.nav-links a:hover {
+    color: var(--primary-color);
+}
+
+.nav-links a.active {
+    color: var(--primary-color);
+}
+
+.nav-links a.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: var(--primary-color);
+}
+
+.nav-user {
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* --- 3. Main Content Area --- */
+.main-content {
+    flex-grow: 1;
+    padding: 2.5rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.subtitle {
+    font-size: 1.2rem;
+    color: var(--text-light);
+    margin-bottom: 2rem;
+    font-weight: 400;
+}
+
+.page-container {
+    background-color: var(--card-background);
+    padding: 2.5rem;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+}
+
+/* --- 4. Dashboard Grid --- */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.dashboard-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2.5rem;
+}
+
+.dashboard-card {
+    display: block;
+    background-color: var(--card-background);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    color: var(--text-dark);
+    text-decoration: none;
+    box-shadow: var(--shadow);
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+
+.dashboard-card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-hover);
+    border-color: var(--primary-color);
+}
+
+.dashboard-card h3 {
+    margin-top: 0;
+    color: var(--primary-color);
+    font-size: 1.15rem;
+    font-weight: 600;
+}
+
+.dashboard-card h4 {
+    margin-top: 0;
+    color: var(--primary-color);
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.dashboard-card p {
+    font-size: 0.95rem;
+    color: var(--text-light);
+    line-height: 1.5;
+    margin: 0.5rem 0;
+}
+
+/* --- 5. AI Solver Chat - ENHANCED --- */
+.chat-container {
+    background-color: var(--card-background);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+.chat-box {
+    background-color: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    min-height: 250px;
+    max-height: 400px;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+    line-height: 1.6;
+}
+
+.chat-box::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-box::-webkit-scrollbar-track {
+    background: var(--background-color);
+}
+
+.chat-box::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.chat-box::-webkit-scrollbar-thumb:hover {
+    background: var(--text-light);
+}
+
+.chat-placeholder {
+    color: var(--text-light);
+    font-style: italic;
+    text-align: center;
+    padding: 2rem;
+}
+
+.chat-loading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--primary-color);
+    font-weight: 500;
+}
+
+.chat-loading::after {
+    content: '';
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--light-blue);
+    border-top: 2px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.chat-error {
+    color: var(--error-color);
+    background-color: #ffe6e6;
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 4px solid var(--error-color);
+}
+
+.chat-form {
+    display: flex;
+    gap: 0;
+}
+
+.chat-form input[type='text'] {
+    flex-grow: 1;
+    padding: 0.85rem 1rem;
+    font-size: 1rem;
+    font-family: 'Inter', sans-serif;
+    border: 1px solid var(--border-color);
+    border-radius: 8px 0 0 8px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    background-color: var(--card-background);
+}
+
+.chat-form input[type='text']:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px var(--light-blue);
+}
+
+.chat-form input[type='text']:disabled {
+    background-color: var(--background-color);
+    color: var(--text-light);
+    cursor: not-allowed;
+}
+
+.chat-form button {
+    padding: 0.85rem 1.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 0 8px 8px 0;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.chat-form button:hover:not(:disabled) {
+    background-color: #0056b3;
+    transform: translateY(-1px);
+}
+
+.chat-form button:disabled {
+    background-color: var(--text-light);
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* --- 6. Progress Analytics & Forms --- */
+.analytics-container {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 1.5rem;
+}
+
+.analytics-card {
+    background-color: var(--card-background);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+}
+
+.analytics-card h4 {
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.75rem;
+    margin-top: 0;
+}
+
+.analytics-card li {
+    margin-bottom: 0.5rem;
+    color: var(--text-light);
+}
+
+/* Re-usable form styles */
+.form-container {
+    background-color: var(--card-background);
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: var(--shadow);
+}
+
+.review-form .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.review-form input[type="text"],
+.review-form input[type="number"],
+.review-form input[type="email"],
+.review-form input[type="password"],
+.review-form select,
+.review-form textarea {
+    width: 100%;
+    padding: 0.85rem 1rem;
+    font-size: 1rem;
+    font-family: 'Inter', sans-serif;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    background-color: var(--card-background);
+}
+
+.review-form textarea {
+    min-height: 100px;
+    margin-bottom: 1rem;
+    resize: vertical;
+}
+
+.review-form select {
+    margin-bottom: 1rem;
+}
+
+.review-form button {
+    width: 100%;
+    border-radius: 8px;
+}
+
+.review-form input:focus,
+.review-form select:focus,
+.review-form textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px var(--light-blue);
+}
+
+/* --- 7. Senior Hub Forum --- */
+.forum-post-box textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 0.75rem 1rem;
+    font-family: 'Inter', sans-serif;
+    font-size: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    resize: vertical;
+    background-color: var(--card-background);
+}
+
+.forum-post-box textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px var(--light-blue);
+}
+
+.forum-feed .forum-post h4 {
+    margin-top: 0;
+}
+
+.forum-feed .forum-post h4 a {
+    color: var(--text-dark);
+    text-decoration: none;
+}
+
+.forum-feed .forum-post h4 a:hover {
+    color: var(--primary-color);
+    text-decoration: underline;
+}
+
+.forum-answer {
+    border-top: 1px dashed var(--border-color);
+    margin-top: 1rem;
+    padding-top: 1rem;
+    background-color: var(--light-blue);
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+.forum-answer p {
+    margin: 0;
+}
+
+/* --- 8. AI Response Formatting (.prose) - ENHANCED --- */
+.prose {
+    line-height: 1.7;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+    color: var(--text-dark);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    font-weight: 600;
+}
+
+.prose h1 {
+    font-size: 1.5rem;
+    border-bottom: 2px solid var(--primary-color);
+    padding-bottom: 0.5rem;
+}
+
+.prose h2 {
+    font-size: 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.25rem;
+}
+
+.prose h3 {
+    font-size: 1.1rem;
+}
+
+.prose h4 {
+    font-size: 1rem;
+    color: var(--primary-color);
+}
+
+.prose p {
+    margin-bottom: 1rem;
+}
+
+.prose ul,
+.prose ol {
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+}
+
+.prose li {
+    margin-bottom: 0.5rem;
+}
+
+.prose strong {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.prose em {
+    color: var(--text-light);
+    font-style: italic;
+}
+
+.prose code {
+    background-color: var(--light-blue);
+    color: var(--primary-color);
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9em;
+}
+
+.prose pre {
+    background-color: #1a1a1a;
+    color: #f8f8f2;
+    padding: 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 1rem 0;
+}
+
+.prose pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+}
+
+.prose blockquote {
+    border-left: 4px solid var(--primary-color);
+    padding-left: 1rem;
+    margin: 1rem 0;
+    color: var(--text-light);
+    font-style: italic;
+}
+
+.prose table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+}
+
+.prose th,
+.prose td {
+    border: 1px solid var(--border-color);
+    padding: 0.75rem;
+    text-align: left;
+}
+
+.prose th {
+    background-color: var(--light-blue);
+    font-weight: 600;
+}
+
+.prose a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.prose a:hover {
+    text-decoration: underline;
+}
+
+/* --- 9. Study Group Chat Styles --- */
+.chat-page-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 160px);
+    max-width: 900px;
+    margin: 2rem auto;
+}
+
+.chat-header {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+}
+
+.chat-header h2 {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.chat-header p {
+    margin: 0;
+    color: var(--text-light);
+}
+
+.chat-messages {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 1.5rem 0.5rem;
+    background-color: var(--background-color);
+    border-radius: 8px;
+    margin-top: 1rem;
+}
+
+.chat-message {
+    background-color: var(--card-background);
+    padding: 0.75rem 1.25rem;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+    max-width: 75%;
+    width: fit-content;
+    box-shadow: var(--shadow);
+}
+
+.chat-message strong {
+    color: var(--primary-color);
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.85rem;
+}
+
+.chat-message p {
+    margin: 0;
+}
+
+.chat-message.own-message {
+    background-color: var(--primary-color);
+    color: white;
+    margin-left: auto;
+}
+
+.chat-message.own-message strong {
+    color: white;
+}
+
+/* --- 10. Responsive Design --- */
+@media (max-width: 768px) {
+    .navbar {
+        padding: 1rem;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .nav-links {
+        gap: 1rem;
+    }
+
+    .main-content {
+        padding: 1rem;
+    }
+
+    .page-container {
+        padding: 1.5rem;
+    }
+
+    .dashboard-grid,
+    .dashboard-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .analytics-container {
+        grid-template-columns: 1fr;
+    }
+
+    .review-form .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .chat-form {
+        flex-direction: column;
+    }
+
+    .chat-form input[type='text'] {
+        border-radius: 8px;
+        margin-bottom: 0.5rem;
+    }
+
+    .chat-form button {
+        border-radius: 8px;
+        width: 100%;
+    }
+
+    .chat-message {
+        max-width: 90%;
+    }
+}
+
+/* --- 11. Utility Classes --- */
+.text-center {
+    text-align: center;
+}
+
+.text-error {
+    color: var(--error-color);
+}
+
+.text-success {
+    color: var(--success-color);
+}
+
+.text-warning {
+    color: var(--warning-color);
+}
+
+.mt-0 { margin-top: 0; }
+.mb-0 { margin-bottom: 0; }
+.mt-1 { margin-top: 0.5rem; }
+.mb-1 { margin-bottom: 0.5rem; }
+.mt-2 { margin-top: 1rem; }
+.mb-2 { margin-bottom: 1rem; }
+
+.hidden {
+    display: none;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 .chat-message.own-message {
