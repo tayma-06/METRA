@@ -205,9 +205,8 @@ function MaterialRepository() {
                                 <p style={{ margin: 0, color: '#5f6368' }}>For Course: {material.course}</p>
                             </div>
 
-                            {/* --- EXTREME HARDCODE: Always show the delete button --- */}
-                            {/* Removed {currentUser && ...} check */}
-                            <button
+                            {currentUser && (currentUser.uid === material.authorId || currentUser.role === 'admin') &&
+                                (<button
                                 onClick={() => handleDelete(material.id)}
                                 style={{
                                     backgroundColor: 'transparent',
@@ -220,7 +219,7 @@ function MaterialRepository() {
                                 }}
                             >
                                 Delete
-                            </button>
+                            </button>)}
                         </div>
 
                         <p style={{fontSize: '0.9rem', color: '#5f6368', marginTop: '1rem'}}>

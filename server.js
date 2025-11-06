@@ -1,51 +1,67 @@
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
+require('dotenv').config();
 
-// --- Firebase Admin Setup ---
+// --- SECURE Firebase Admin Setup ---
 const admin = require('firebase-admin');
 let db;
-let FieldValue; // Declare FieldValue here
+let FieldValue;
 
-// IMPORTANT: This file MUST be present for Firestore access to work.
-// We use try/catch to ensure the server starts even if the key is missing.
 try {
-    const serviceAccount = require('./serviceAccountKey.json');
+    // Get Firebase config from environment variable
+    const firebaseConfig = process.env.FIREBASE_SERVICE_ACCOUNT;
+
+    if (!firebaseConfig || firebaseConfig === 'placeholder') {
+        throw new Error('Firebase configuration not found in environment variables. Please add FIREBASE_SERVICE_ACCOUNT to your .env file.');
+    }
+
+    const serviceAccount = JSON.parse(firebaseConfig);
+
+    // Fix the private key formatting - convert \\n to actual newlines
+    if (serviceAccount.private_key) {
+        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    }
+
     admin.initializeApp({
         credential: admin.credential.cert(serviceAccount)
     });
+
     db = admin.firestore();
-    FieldValue = admin.firestore.FieldValue; // Initialize FieldValue
-    console.log('Firebase Admin SDK initialized successfully.');
+    FieldValue = admin.firestore.FieldValue;
+    console.log('✅ Firebase Admin SDK initialized successfully from environment variables.');
+
 } catch (error) {
-    console.error('*** WARNING: Firebase Admin SDK NOT initialized. ***');
-    console.error('*** Reason: Could not find or read "serviceAccountKey.json". ***');
-    console.error('*** Firestore endpoints will NOT work until this file is added. ***');
-    // Set mocks for safety if db is not initialized
+    console.error('❌ Firebase Admin SDK initialization failed:');
+    console.error('   Reason:', error.message);
+    console.error('   💡 To fix: Check your FIREBASE_SERVICE_ACCOUNT formatting in .env');
+    console.error('   🔒 Firestore endpoints will NOT work until Firebase is properly configured');
+
+    // Set mocks for safety
     db = null;
-    FieldValue = { serverTimestamp: () => new Date(), arrayUnion: (x) => [x] }; // Mock FieldValue
+    FieldValue = {
+        serverTimestamp: () => new Date(),
+        arrayUnion: (x) => [x],
+        arrayRemove: (x) => [x]
+    };
 }
 // --- End Firebase Admin Setup ---
 
 const app = express();
-app.use(express.json()); // Middleware to parse JSON bodies
-app.use(cors()); // Middleware to allow cross-origin requests
+app.use(express.json());
+app.use(cors());
 
 const PORT = process.env.PORT || 8000;
-// CRITICAL: Paste your real API key here, then restart the server.
-// If you see the mock answer, replace this string with your actual Gemini API Key.
-const GEMINI_API_KEY = "AIzaSyBx6lD5y6HMwjqBl6Cj0h1pgoIGW_SWuUo";
-
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // Helper function to check for DB readiness
 const checkDbReady = (res) => {
     if (!db) {
-        res.status(503).json({ error: 'Database service unavailable. Please add serviceAccountKey.json to your backend folder and restart the server.' });
+        res.status(503).json({ error: 'Database service unavailable. Please configure Firebase in your .env file and restart the server.' });
         return false;
     }
     return true;
 };
-
 
 // --- Mock Data for features NOT yet in Firestore ---
 const mockAnalysis = {
@@ -69,22 +85,18 @@ app.post('/api/solve', async (req, res) => {
         return res.status(400).json({ error: 'Question is required.' });
     }
 
-    // --- FIX START: Checking for the placeholder key ---
-    const PLACEHOLDER_KEY = "YOUR_REAL_GEMINI_API_KEY_HERE";
-
-    if (!GEMINI_API_KEY || GEMINI_API_KEY === PLACEHOLDER_KEY) {
+    // Check if API key is set in environment
+    if (!GEMINI_API_KEY) {
         return res.json({
-            answer: `This is a **mock answer** for: "${question}". \n\n The backend successfully received your question. To get a real answer, you need to: \n 1. Get a real, unique Gemini API key. \n 2. Paste it into 'server.js' where it says \`"YOUR_REAL_GEMINI_API_KEY_HERE"\`. \n 3. Restart your server.\n\n ### Sample Formatted Answer:\n* **Point 1:** This is how lists look.\n* **Point 2:** And **bold text**.`
+            answer: `This is a **mock answer** for: "${question}". \n\n The backend successfully received your question. To get a real answer, you need to: \n 1. Set your Gemini API key in the .env file as GEMINI_API_KEY=your_actual_key_here \n 2. Restart your server.\n\n ### Sample Formatted Answer:\n* **Point 1:** This is how lists look.\n* **Point 2:** And **bold text**.`
         });
     }
-    // --- FIX END ---
 
     // --- REAL GEMINI API CALL ---
     try {
         const modelName = 'gemini-2.5-flash-preview-09-2025';
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
 
-        // Use the combined prompt with Markdown instruction
         const fullPrompt = `Please answer this student's question. Use Markdown for formatting (like lists, bold, and headings) to make the answer easy to read.\n\nQuestion: ${question}`;
 
         const payload = {
@@ -110,7 +122,6 @@ app.post('/api/solve', async (req, res) => {
         if (text) {
             res.json({ answer: text });
         } else {
-            // This handles safety-blocked responses gracefully
             res.json({ answer: "I'm sorry, I can't provide a response to that. Please try a different question." });
         }
 
@@ -118,7 +129,6 @@ app.post('/api/solve', async (req, res) => {
         console.error('Gemini API error:', error);
         res.status(500).json({ error: 'Failed to get answer from AI. ' + error.message });
     }
-
 });
 
 // --- Course Reviews Endpoints (USING FIRESTORE) ---
@@ -138,18 +148,15 @@ app.post('/api/reviews', async (req, res) => {
     if (!checkDbReady(res)) return;
     try {
         const newReview = req.body;
-        // Add a server-side timestamp
         newReview.createdAt = FieldValue.serverTimestamp();
 
         const docRef = await db.collection('reviews').add(newReview);
-
         res.status(201).json({ id: docRef.id, ...newReview });
     } catch (error) {
         console.error('Failed to add review:', error);
         res.status(500).json({ error: 'Failed to add review.' });
     }
 });
-
 
 // --- Senior Hub Endpoints (USING FIRESTORE) ---
 app.get('/api/hub/posts', async (req, res) => {
@@ -176,11 +183,10 @@ app.post('/api/hub/posts', async (req, res) => {
             authorId: newPost.authorId,
             authorName: newPost.authorName,
             createdAt: newPost.createdAt,
-            reply: null // Explicitly initialize the reply field
+            reply: null
         };
 
         const docRef = await db.collection('hub_posts').add(postToSave);
-
         res.status(201).json({ id: docRef.id, ...postToSave });
     } catch (error) {
         console.error('Failed to add post:', error);
@@ -188,7 +194,7 @@ app.post('/api/hub/posts', async (req, res) => {
     }
 });
 
-// --- DELETE a Post (Only the author can delete the original question) ---
+// --- DELETE a Post ---
 app.delete('/api/hub/posts/:id', async (req, res) => {
     if (!checkDbReady(res)) return;
     try {
@@ -207,8 +213,6 @@ app.delete('/api/hub/posts/:id', async (req, res) => {
         }
 
         const data = doc.data();
-
-        // --- Security Check: Only the author can delete the post ---
         if (data.authorId !== userId) {
             return res.status(403).json({ message: "You are not authorized to delete this post." });
         }
@@ -222,8 +226,7 @@ app.delete('/api/hub/posts/:id', async (req, res) => {
     }
 });
 
-
-// --- Reply to a Post (PUT Request) ---
+// --- Reply to a Post ---
 app.put('/api/hub/posts/:id/reply', async (req, res) => {
     if (!checkDbReady(res)) return;
     try {
@@ -242,14 +245,13 @@ app.put('/api/hub/posts/:id/reply', async (req, res) => {
         };
 
         const postRef = db.collection('hub_posts').doc(id);
-
         const postDoc = await postRef.get();
+
         if (postDoc.exists && postDoc.data().reply) {
             return res.status(409).json({ message: "This post already has a senior reply. Only one reply is allowed." });
         }
 
         await postRef.update({ reply: replyObject });
-
         res.status(200).json({ message: "Reply added successfully.", reply: replyObject });
 
     } catch (error) {
@@ -258,7 +260,7 @@ app.put('/api/hub/posts/:id/reply', async (req, res) => {
     }
 });
 
-// --- DELETE a Reply from a Post (Only the reply author can delete the reply) ---
+// --- DELETE a Reply ---
 app.delete('/api/hub/posts/:id/reply', async (req, res) => {
     if (!checkDbReady(res)) return;
     try {
@@ -277,17 +279,14 @@ app.delete('/api/hub/posts/:id/reply', async (req, res) => {
         }
 
         const postData = doc.data();
-
         if (!postData.reply) {
             return res.status(404).json({ message: "No reply found to delete." });
         }
 
-        // Security Check: Only the author of the REPLY can delete it
         if (postData.reply.authorId !== userId) {
             return res.status(403).json({ message: "You are not authorized to delete this reply." });
         }
 
-        // Delete the reply by setting the field to null
         await postRef.update({ reply: null });
         res.status(200).json({ message: "Reply deleted successfully." });
 
@@ -297,14 +296,12 @@ app.delete('/api/hub/posts/:id/reply', async (req, res) => {
     }
 });
 
-
 // --- Progress Analyst Endpoint (Mock Data) ---
 app.post('/api/progress', (req, res) => {
-    // In a real app, you would send this data to an AI to *generate* the plan.
     res.json(mockAnalysis);
 });
 
-// --- Material Repository Endpoints (USING FIRESTORE) ---
+// --- Material Repository Endpoints ---
 app.get('/api/materials', async (req, res) => {
     if (!checkDbReady(res)) return;
     try {
@@ -317,7 +314,6 @@ app.get('/api/materials', async (req, res) => {
     }
 });
 
-// --- Upload endpoint to accept the link and user IDs ---
 app.post('/api/materials/upload', async (req, res) => {
     if (!checkDbReady(res)) return;
     try {
@@ -344,7 +340,6 @@ app.post('/api/materials/upload', async (req, res) => {
     }
 });
 
-// --- Delete material endpoint ---
 app.delete('/api/materials/:id', async (req, res) => {
     if (!checkDbReady(res)) return;
     try {
@@ -363,8 +358,6 @@ app.delete('/api/materials/:id', async (req, res) => {
         }
 
         const data = doc.data();
-
-        // Security check: Only the author can delete their post
         if (data.authorId !== userId) {
             return res.status(403).json({ message: "You are not authorized to delete this material." });
         }
@@ -378,10 +371,7 @@ app.delete('/api/materials/:id', async (req, res) => {
     }
 });
 
-
-// --- Smart Study Groups Endpoints (USING FIRESTORE) ---
-
-// --- Create a new study group ---
+// --- Smart Study Groups Endpoints ---
 app.post('/api/study-groups', async (req, res) => {
     if (!checkDbReady(res)) return;
     const { name, description, capacity, creatorId } = req.body;
@@ -395,7 +385,6 @@ app.post('/api/study-groups', async (req, res) => {
             description,
             capacity: parseInt(capacity, 10),
             createdAt: FieldValue.serverTimestamp(),
-            // The creator is automatically the first member
             memberIds: [creatorId]
         };
 
@@ -407,7 +396,6 @@ app.post('/api/study-groups', async (req, res) => {
         res.status(500).json({ message: 'Failed to create group.' });
     }
 });
-
 
 app.get('/api/study-groups', async (req, res) => {
     if (!checkDbReady(res)) return;
@@ -431,7 +419,6 @@ app.post('/api/study-groups/join', async (req, res) => {
     const groupRef = db.collection('study_groups').doc(groupId);
 
     try {
-        // Use a transaction to safely update the group
         const updatedGroup = await db.runTransaction(async (transaction) => {
             const groupDoc = await transaction.get(groupRef);
             if (!groupDoc.exists) {
@@ -439,25 +426,20 @@ app.post('/api/study-groups/join', async (req, res) => {
             }
 
             const groupData = groupDoc.data();
-
             const memberIds = groupData.memberIds || [];
 
-            // Check if user is already a member
             if (memberIds.includes(userId)) {
                 throw new Error("You are already in this group.");
             }
 
-            // Check if group is full
             if (memberIds.length >= groupData.capacity) {
                 throw new Error("This group is already full.");
             }
 
-            // Update the array using FieldValue.arrayUnion
             transaction.update(groupRef, {
                 memberIds: FieldValue.arrayUnion(userId)
             });
 
-            // Return the updated data
             const newMemberIds = [...memberIds, userId];
             return { ...groupData, memberIds: newMemberIds };
         });
@@ -473,7 +455,6 @@ app.post('/api/study-groups/join', async (req, res) => {
     }
 });
 
-// --- Get a single group's details (for chat header) ---
 app.get('/api/study-groups/:id', async (req, res) => {
     if (!checkDbReady(res)) return;
     try {
@@ -492,18 +473,16 @@ app.get('/api/study-groups/:id', async (req, res) => {
     }
 });
 
-// --- Post a message to a group chat ---
 app.post('/api/study-groups/:id/messages', async (req, res) => {
     if (!checkDbReady(res)) return;
     try {
-        const { id } = req.params; // This is the groupId
+        const { id } = req.params;
         const { text, authorId, authorName } = req.body;
 
         if (!text || !authorId || !authorName) {
             return res.status(400).json({ message: 'Missing message data.' });
         }
 
-        // Add the message to the 'messages' subcollection in Firestore
         const messageData = {
             text,
             authorId,
@@ -521,26 +500,22 @@ app.post('/api/study-groups/:id/messages', async (req, res) => {
     }
 });
 
-
-// --- Dashboard Summary Endpoint (NOW USING FIRESTORE) ---
+// --- Dashboard Summary Endpoint ---
 app.get('/api/dashboard-summary', async (req, res) => {
     if (!checkDbReady(res)) return;
     try {
-        // 1. Get the latest post from the Senior Hub
         const postSnapshot = await db.collection('hub_posts')
             .orderBy('createdAt', 'desc')
             .limit(1)
             .get();
         const latestPost = postSnapshot.docs[0] ? { id: postSnapshot.docs[0].id, ...postSnapshot.docs[0].data() } : null;
 
-        // 2. Get the latest material
         const materialSnapshot = await db.collection('materials')
             .orderBy('createdAt', 'desc')
             .limit(1)
             .get();
         const latestMaterial = materialSnapshot.docs[0] ? { id: materialSnapshot.docs[0].id, ...materialSnapshot.docs[0].data() } : null;
 
-        // 3. Get an open study group (this is more complex, so we'll just get the first one)
         const groupSnapshot = await db.collection('study_groups')
             .limit(1)
             .get();
@@ -558,8 +533,10 @@ app.get('/api/dashboard-summary', async (req, res) => {
     }
 });
 
-
 // --- Start Server ---
 app.listen(PORT, () => {
-    console.log(`METRA backend server listening on http://localhost:${PORT}`);
+    console.log(`🚀 METRA backend server listening on http://localhost:${PORT}`);
+    console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🗄️  Database: ${db ? 'Firebase Firestore ✅' : 'Not configured ❌'}`);
+    console.log(`🤖 AI Solver: ${GEMINI_API_KEY ? 'Gemini API ✅' : 'Not configured ❌'}`);
 });
