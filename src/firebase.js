@@ -1,47 +1,98 @@
-// firebase.js
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore, collection, addDoc, Timestamp } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+// src/firebase.js
+import { initializeApp, getApps } from "firebase/app";
+import {
+  getAuth,
+  setPersistence,
+  browserLocalPersistence,
+  connectAuthEmulator,
+} from "firebase/auth";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  serverTimestamp,
+  connectFirestoreEmulator,
+} from "firebase/firestore";
+import {
+  getStorage,
+  connectStorageEmulator,
+} from "firebase/storage";
+// Optional analytics (only in secure origins and when measurementId exists)
+import { getAnalytics, isSupported as analyticsSupported } from "firebase/analytics";
 
-// ✅ Your Firebase config
+/**
+ * Environment-driven config (create .env.local)
+ *   VITE_FIREBASE_API_KEY=...
+ *   VITE_FIREBASE_AUTH_DOMAIN=...
+ *   VITE_FIREBASE_PROJECT_ID=...
+ *   VITE_FIREBASE_STORAGE_BUCKET=...
+ *   VITE_FIREBASE_MESSAGING_SENDER_ID=...
+ *   VITE_FIREBASE_APP_ID=...
+ *   VITE_FIREBASE_MEASUREMENT_ID=...   (optional)
+ *   VITE_USE_EMULATORS=true            (optional for local dev)
+ */
 const firebaseConfig = {
-  apiKey: "AIzaSyDODUa-r44xdunMa-37ahfePERTbD8rVlk",
-  authDomain: "metra-app.firebaseapp.com",
-  projectId: "metra-app",
-  storageBucket: "metra-app.appspot.com",
-  messagingSenderId: "654469394667",
-  appId: "1:654469394667:web:86ad0c2bb34a21fcfa8eae",
-  measurementId: "G-SDEKLLJX12"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || undefined,
 };
 
-// Initialize Firebase app
-const app = initializeApp(firebaseConfig);
+// HMR-safe app init
+const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 
-// Initialize and export Auth
+// Core SDKs
 export const auth = getAuth(app);
-
-// Initialize and export Firestore
 export const db = getFirestore(app);
-
-// Initialize and export Storage (for files, images, voice messages)
 export const storage = getStorage(app);
 
-// ----------------------
-// Add achievement function
-// ----------------------
-export const addAchievement = async (userId, achievement) => {
+// Auth persistence (stay logged in across reloads)
+setPersistence(auth, browserLocalPersistence).catch(() => {
+  /* non-fatal; falls back to default */
+});
+
+// Optional: Analytics (only if supported + measurementId present)
+(async () => {
   try {
-    const docRef = await addDoc(collection(db, "users", userId, "achievements"), {
-      ...achievement,
-      dateEarned: achievement.dateEarned || Timestamp.now()
-    });
-    return docRef;
-  } catch (err) {
-    console.error("Failed to add achievement:", err);
-    throw err;
+    if (firebaseConfig.measurementId && (await analyticsSupported())) {
+      getAnalytics(app);
+    }
+  } catch {
+    // Ignore analytics errors in unsupported environments (e.g., http, SSR)
   }
+})();
+
+// Optional: Local emulators for dev
+if (import.meta.env.VITE_USE_EMULATORS === "true") {
+  try {
+    connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
+    connectFirestoreEmulator(db, "localhost", 8080);
+    connectStorageEmulator(storage, "localhost", 9199);
+    // console.info("Connected to Firebase emulators.");
+  } catch {
+    /* ignore if already connected */
+  }
+}
+
+/**
+ * Add an achievement for a user.
+ * If no date provided, uses Firestore server time (preferred over client clock).
+ */
+export const addAchievement = async (userId, achievement) => {
+  const payload = {
+    title: achievement.title || "Achievement",
+    description: achievement.description || "",
+    // Prefer server time if not provided
+    dateEarned: achievement.dateEarned || serverTimestamp(),
+    icon: achievement.icon || null,
+    points: typeof achievement.points === "number" ? achievement.points : null,
+  };
+  const ref = await addDoc(collection(db, "users", userId, "achievements"), payload);
+  return ref;
 };
 
-// Optional: export Timestamp if you need it elsewhere
-export { Timestamp };
+// If you still need Timestamp in some components, you can import from firestore directly:
+// import { Timestamp } from "firebase/firestore";
