@@ -362,6 +362,32 @@ button:hover {
     max-width: 900px;
     margin: 2rem auto;
 }
+.chat {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.msg { display: flex; }
+.msg.mine { justify-content: flex-end; }
+.msg.theirs { justify-content: flex-start; }
+
+.bubble {
+  max-width: 65%;
+  padding: 10px 12px;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+  position: relative;
+}
+.msg.mine .bubble { background: #e7f3ff; border-top-right-radius: 6px; }
+.msg.theirs .bubble { background: #f4f4f5; border-top-left-radius: 6px; }
+
+.text { white-space: pre-wrap; word-break: break-word; }
+.meta {
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 4px; font-size: 12px; color: #6b7280;
+}
+
+.typing-indicator {
+  font-size: 13px; color: #6b7280; margin-top: 6px;
+}
 
 .chat-header {
     border-bottom: 1px solid var(--border-color);
@@ -956,6 +982,13 @@ body {
     max-width: 900px;
     margin: 2rem auto;
 }
+/* Force chat text to black/dark */
+.chat-message .bubble .text { color: #111 !important; }
+.chat-message .bubble .author { color: #111 !important; }
+.chat-message .bubble .meta { color: #444 !important; }
+
+/* If any parent sets a light color globally, reset it here */
+.chat-messages, .chat-message, .bubble { color: inherit !important; }
 
 .chat-header {
     border-bottom: 1px solid var(--border-color);
@@ -1114,3 +1147,285 @@ body {
 }
 
 /* The chat form is already styled by .chat-form */
+/* ===== Achievements & Skills UI ===== */
+
+.achievement-card-container {
+  margin-top: 2rem;
+  margin-bottom: 1.5rem;
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 1.75rem 1.75rem 1.5rem;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+  border: 1px solid #e5e7eb;
+}
+
+.achievement-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.achievement-title-heading {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.achievement-subtitle {
+  margin: 0.3rem 0 0;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.achievement-form {
+  margin-top: 0.75rem;
+}
+
+.achievement-error {
+  color: #b91c1c;
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 1.5rem;
+}
+
+.achievement-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.achievement-field.full {
+  grid-column: 1 / -1;
+}
+
+.achievement-field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.achievement-field input,
+.achievement-field select {
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.achievement-field input:focus,
+.achievement-field select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.15);
+}
+
+/* toggle */
+
+.achievement-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.toggle-texts {
+  display: flex;
+  flex-direction: column;
+}
+
+.toggle-main {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.toggle-sub {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+/* nice switch */
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 22px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #d1d5db;
+  transition: 0.2s;
+  border-radius: 999px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: 0.2s;
+  border-radius: 999px;
+}
+
+.switch input:checked + .slider {
+  background-color: #2563eb;
+}
+
+.switch input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+.achievement-submit-btn {
+  margin-top: 1.25rem;
+  padding: 0.75rem 1.3rem;
+  border-radius: 999px;
+  border: none;
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease,
+    box-shadow 0.15s ease;
+}
+
+.achievement-submit-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 25px rgba(37, 99, 235, 0.35);
+}
+
+.achievement-submit-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* list */
+
+.achievement-list-wrapper {
+  margin-top: 1.5rem;
+}
+
+.achievement-list-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 0.75rem;
+}
+
+.achievement-loading,
+.achievement-empty {
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin-top: 0.75rem;
+}
+
+.achievement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.achievement-item-card {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+  border: 1px solid #e5e7eb;
+}
+
+.achievement-item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.achievement-item-title {
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 0.25rem;
+}
+
+.achievement-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.pill {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid rgba(37, 99, 235, 0.15);
+}
+
+.pill-type {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.pill-private {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.achievement-item-date {
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.achievement-item-desc {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  color: #4b5563;
+}
+
+/* small chips mode (for future use in groups, etc.) */
+
+.achievement-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.achievement-chip {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+/* responsive */
+
+@media (max-width: 640px) {
+  .achievement-grid {
+    grid-template-columns: 1fr;
+  }
+}

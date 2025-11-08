@@ -1,257 +1,383 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext'; // Import useAuth
+import React, { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 
-// This is the URL of your backend server
 const BACKEND_URL = 'http://localhost:8000';
 
+const CATEGORIES = ['Notes', 'Slides', 'Past Paper', 'Book', 'Other'];
+const SORT_OPTIONS = [
+  { v: 'createdAt_desc', label: 'Newest' },
+  { v: 'likes_desc', label: 'Most liked' },
+  { v: 'clicks_desc', label: 'Most opened' },
+];
+
 function MaterialRepository() {
-    const [materials, setMaterials] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const [message, setMessage] = useState(null);
+  const { currentUser } = useAuth();
 
-    // --- State for the new material form ---
-    const [course, setCourse] = useState('');
-    const [title, setTitle] = useState('');
-    const [category, setCategory] = useState('Notes');
-    const [link, setLink] = useState(''); // State for the shareable link
-    const [formError, setFormError] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
+  // list + ui state
+  const [materials, setMaterials] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
-    const { currentUser } = useAuth(); // Get the current user
+  // form state
+  const [course, setCourse] = useState('');
+  const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('Notes');
+  const [link, setLink] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
 
-    // 1. --- FETCH ALL MATERIALS (GET Request) ---
-    useEffect(() => {
-        const fetchMaterials = async () => {
-            setIsLoading(true);
-            setError(null);
-            try {
-                const response = await fetch(`${BACKEND_URL}/api/materials`);
-                if (!response.ok) {
-                    throw new Error('Failed to fetch materials.');
-                }
-                const data = await response.json();
-                setMaterials(data); // Save the materials
-            } catch (err) {
-                setError(err.message);
-            } finally {
-                setIsLoading(false);
-            }
-        };
+  // search / filter / sort
+  const [q, setQ] = useState('');
+  const [courseFilter, setCourseFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [sort, setSort] = useState('createdAt_desc');
+  const [onlyMine, setOnlyMine] = useState(false);
+  const [onlyBookmarked, setOnlyBookmarked] = useState(false);
 
-        fetchMaterials();
-    }, []); // Runs once on mount
+  const myUid = currentUser?.uid || '';
 
-    // 2. --- SUBMIT A NEW MATERIAL (POST Request) ---
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setFormError(null);
-        setMessage(null);
-        if (!course || !title || !category || !link) {
-            setFormError('Please fill out all fields.');
-            return;
-        }
-        if (!link.startsWith('http')) {
-            setFormError('Please enter a valid link (e.g., https://...)');
-            return;
-        }
+  // === Fetch materials ===
+  const fetchMaterials = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const params = new URLSearchParams();
+      if (q) params.set('q', q);
+      if (courseFilter) params.set('course', courseFilter);
+      if (categoryFilter) params.set('category', categoryFilter);
+      if (sort) params.set('sort', sort);
+      params.set('limit', '100');
 
-        setIsSubmitting(true);
-        try {
-            // Use signInAnonymously if currentUser is null, otherwise use the real UID/Display name
-            const authorId = currentUser ? currentUser.uid : 'anonymous-' + Math.random().toString(36).substring(2, 9);
-            const authorName = currentUser ? (currentUser.displayName || 'Authenticated User') : 'Anonymous';
+      const res = await fetch(`${BACKEND_URL}/api/materials?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch materials.');
+      let data = await res.json();
 
-            const response = await fetch(`${BACKEND_URL}/api/materials/upload`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    course,
-                    title,
-                    category,
-                    link,
-                    authorId: authorId,
-                    authorName: authorName
-                }),
-            });
+      // client-side trims
+      if (onlyMine && myUid) data = data.filter(m => m.authorId === myUid);
+      if (onlyBookmarked && myUid) data = data.filter(m => (m.bookmarkedBy || []).includes(myUid));
 
-            if (!response.ok) {
-                throw new Error('Failed to share material.');
-            }
+      setMaterials(data);
+    } catch (e) {
+      setError(e.message || 'Failed to fetch materials.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-            const newMaterial = await response.json();
-            setMaterials([newMaterial, ...materials]);
-            setMessage('Material shared successfully!');
+  useEffect(() => { fetchMaterials(); /* eslint-disable-next-line */ }, []);
+  // refetch when filters change (debounce q in real apps)
+  useEffect(() => { fetchMaterials(); /* eslint-disable-next-line */ }, [q, courseFilter, categoryFilter, sort, onlyMine, onlyBookmarked]);
 
-            // Clear the form
-            setCourse('');
-            setTitle('');
-            setCategory('Notes');
-            setLink('');
+  // === Create material ===
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    setMessage('');
+    if (!course || !title || !category || !link) {
+      setFormError('Please fill out all fields.');
+      return;
+    }
+    if (!/^https?:\/\//i.test(link)) {
+      setFormError('Please enter a valid link (e.g., https://...)');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const authorId = myUid || `anonymous-${Math.random().toString(36).slice(2, 9)}`;
+      const authorName = currentUser?.displayName || (myUid ? 'Authenticated User' : 'Anonymous');
 
-        } catch (err) {
-            setFormError(err.message);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+      const res = await fetch(`${BACKEND_URL}/api/materials/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ course, title, category, link, authorId, authorName }),
+      });
+      if (!res.ok) throw new Error('Failed to share material.');
+      const created = await res.json();
+      setMaterials(prev => [created, ...prev]);
+      setMessage('Material shared successfully!');
+      setCourse(''); setTitle(''); setCategory('Notes'); setLink('');
+    } catch (e) {
+      setFormError(e.message || 'Failed to share material.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-    // 3. --- NEW: DELETE A MATERIAL (DELETE Request) ---
-    const handleDelete = async (materialId) => {
-        // We use a custom modal or simple confirmation since alert() is forbidden
-        if (!window.confirm('Are you sure you want to delete this material? This action cannot be undone.')) {
-            return;
-        }
+  // === Delete ===
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this material? This cannot be undone.')) return;
+    setError(''); setMessage('');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/materials/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: myUid || 'temp-user' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to delete material.');
+      setMaterials(prev => prev.filter(m => m.id !== id));
+      setMessage('Material deleted.');
+    } catch (e) {
+      setError(e.message);
+    }
+  };
 
-        setError(null);
-        setMessage(null);
-        try {
-            // IMPORTANT: We must still send the current user's UID for the *backend* check
-            const userId = currentUser ? currentUser.uid : 'temp-user';
+  // === Like / Unlike (optimistic) ===
+  const toggleLike = async (m) => {
+    if (!myUid) { setMessage('Sign in to like.'); return; }
+    const liked = (m.likedBy || []).includes(myUid);
+    // optimistic UI
+    setMaterials(prev => prev.map(x => x.id === m.id ? {
+      ...x,
+      likes: (x.likes || 0) + (liked ? -1 : 1),
+      likedBy: liked ? (x.likedBy || []).filter(u => u !== myUid) : [...(x.likedBy || []), myUid],
+    } : x));
+    try {
+      await fetch(`${BACKEND_URL}/api/materials/${m.id}/like`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: myUid, like: !liked })
+      });
+    } catch { /* ignore – optimistic */ }
+  };
 
-            const response = await fetch(`${BACKEND_URL}/api/materials/${materialId}`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: userId })
-            });
+  // === Bookmark / Unbookmark (optimistic) ===
+  const toggleBookmark = async (m) => {
+    if (!myUid) { setMessage('Sign in to bookmark.'); return; }
+    const marked = (m.bookmarkedBy || []).includes(myUid);
+    setMaterials(prev => prev.map(x => x.id === m.id ? {
+      ...x,
+      bookmarkedBy: marked ? (x.bookmarkedBy || []).filter(u => u !== myUid) : [...(x.bookmarkedBy || []), myUid],
+    } : x));
+    try {
+      await fetch(`${BACKEND_URL}/api/materials/${m.id}/bookmark`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: myUid, bookmark: !marked })
+      });
+    } catch { /* ignore */ }
+  };
 
-            const data = await response.json();
-            if (!response.ok) {
-                // The backend still enforces the ownership check! (Unless you commented it out in server.js)
-                throw new Error(data.message || 'Failed to delete material. The server still requires ownership verification.');
-            }
+  // === Track click then open ===
+  const openMaterial = async (m) => {
+    try {
+      fetch(`${BACKEND_URL}/api/materials/${m.id}/click`, { method: 'POST' }).catch(()=>{});
+    } finally {
+      window.open(m.link, '_blank', 'noopener,noreferrer');
+    }
+  };
 
-            // Remove the material from the state
-            setMaterials(materials.filter(m => m.id !== materialId));
-            setMessage('Material deleted successfully.');
+  // === Report broken/inappropriate ===
+  const reportMaterial = async (m) => {
+    const reason = window.prompt('Report this material. Reason? (e.g., broken link, wrong course, inappropriate)');
+    if (!reason) return;
+    try {
+      await fetch(`${BACKEND_URL}/api/materials/${m.id}/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason })
+      });
+      setMessage('Thanks. We recorded your report.');
+    } catch {
+      setError('Failed to send report.');
+    }
+  };
 
-        } catch (err) {
-            setError(err.message);
-        }
-    };
+  const coursesInList = useMemo(
+    () => Array.from(new Set(materials.map(m => m.course).filter(Boolean))).sort(),
+    [materials]
+  );
 
-    return (
-        <div className="page-container">
-            <h2>📚 Centralized Material Repository</h2>
-            <p className="subtitle">Find and share notes, slides, and past papers using shareable links (e.g., Google Drive).</p>
+  return (
+    <div className="page-container">
+      <h2>📚 Centralized Material Repository</h2>
+      <p className="subtitle">
+        Find and share notes, slides, and past papers using shareable links (e.g., Google Drive).
+      </p>
 
-            {/* --- Section 1: Submit a New Material --- */}
-            <div className="form-container analytics-card">
-                <h4>Share a Resource</h4>
-                <form onSubmit={handleSubmit} className="review-form">
-                    {formError && <p style={{ color: 'red' }}>{formError}</p>}
-                    {message && <p style={{ color: 'green' }}>{message}</p>}
+      {/* Share form */}
+      <div className="form-container analytics-card">
+        <h4>Share a Resource</h4>
+        <form onSubmit={handleSubmit} className="review-form">
+          {formError && <p style={{ color: 'red' }}>{formError}</p>}
+          {message && !formError && <p style={{ color: 'green' }}>{message}</p>}
 
-                    <div className="form-row">
-                        <input
-                            type="text"
-                            placeholder="Course Code (e.g., CSE321)"
-                            value={course}
-                            onChange={(e) => setCourse(e.target.value)}
-                        />
-                        <input
-                            type="text"
-                            placeholder="Title (e.g., Midterm 2023 Solved)"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                        />
-                    </div>
-                    <div className="form-row">
-                        <select value={category} onChange={(e) => setCategory(e.target.value)}>
-                            <option value="Notes">Notes</option>
-                            <option value="Slides">Slides</option>
-                            <option value="Past Paper">Past Paper</option>
-                            <option value="Book">Book</option>
-                            <option value="Other">Other</option>
-                        </select>
-                        {/* Shareable Link input */}
-                        <input
-                            type="text"
-                            placeholder="Shareable Link (e.g., Google Drive)"
-                            value={link}
-                            onChange={(e) => setLink(e.target.value)}
-                        />
-                    </div>
-                    <button type="submit" disabled={isSubmitting}>
-                        {isSubmitting ? 'Sharing...' : 'Share Material'}
-                    </button>
-                </form>
-            </div>
+          <div className="form-row">
+            <input
+              type="text"
+              placeholder="Course Code (e.g., CSE321)"
+              value={course}
+              onChange={(e) => setCourse(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Title (e.g., Midterm 2023 Solved)"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
 
-            {/* --- Section 2: Display Existing Materials --- */}
-            <h3 style={{ marginTop: '2rem' }}>Shared Materials</h3>
-            <div className="reviews-list">
-                {isLoading && <p>Loading materials...</p>}
-                {error && <p style={{ color: 'red' }}>{error}</p>}
+          <div className="form-row">
+            <select value={category} onChange={(e) => setCategory(e.target.value)}>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <input
+              type="text"
+              placeholder="Shareable Link (e.g., Google Drive)"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+            />
+          </div>
 
-                {materials.length === 0 && !isLoading && <p>No materials shared yet. Be the first!</p>}
+          <button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Sharing...' : 'Share Material'}
+          </button>
+        </form>
+      </div>
 
-                {materials.map((material) => (
-                    <div key={material.id} className="review-card analytics-card">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div>
-                <span
-                    style={{
-                        backgroundColor: '#eee',
-                        padding: '0.2rem 0.6rem',
-                        borderRadius: '12px',
-                        fontSize: '0.8rem',
-                        color: '#555'
-                    }}
-                >
-                  {material.category}
-                </span>
-                                <h4 style={{ margin: '0.5rem 0 0.25rem 0' }}>{material.title}</h4>
-                                <p style={{ margin: 0, color: '#5f6368' }}>For Course: {material.course}</p>
-                            </div>
-
-                            {currentUser && (currentUser.uid === material.authorId || currentUser.role === 'admin') &&
-                                (<button
-                                onClick={() => handleDelete(material.id)}
-                                style={{
-                                    backgroundColor: 'transparent',
-                                    color: '#d9534f',
-                                    border: '1px solid #d9534f',
-                                    padding: '0.4rem 0.8rem',
-                                    borderRadius: '8px',
-                                    fontSize: '0.9rem',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Delete
-                            </button>)}
-                        </div>
-
-                        <p style={{fontSize: '0.9rem', color: '#5f6368', marginTop: '1rem'}}>
-                            Posted by: {material.authorName || 'Anonymous'}
-                        </p>
-
-                        {/* --- Link Button --- */}
-                        <a
-                            href={material.link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                                textDecoration: 'none',
-                                display: 'inline-block',
-                                width: '100%',
-                                textAlign: 'center',
-                                padding: '0.75rem',
-                                backgroundColor: '#007aff',
-                                color: 'white',
-                                borderRadius: '8px',
-                                marginTop: '1rem',
-                                fontWeight: '500',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            Open Material
-                        </a>
-                    </div>
-                ))}
-            </div>
+      {/* Filters */}
+      <div className="analytics-card" style={{ marginTop: '1rem', paddingTop: '0.8rem' }}>
+        <div className="form-row" style={{ alignItems: 'center' }}>
+          <input
+            type="text"
+            placeholder="Search title or course…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <select value={courseFilter} onChange={(e) => setCourseFilter(e.target.value)}>
+            <option value="">All Courses</option>
+            {coursesInList.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+            <option value="">All Categories</option>
+            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select value={sort} onChange={(e) => setSort(e.target.value)}>
+            {SORT_OPTIONS.map(s => <option key={s.v} value={s.v}>{s.label}</option>)}
+          </select>
         </div>
-    );
+        <div style={{ display: 'flex', gap: '1rem', marginTop: '0.6rem' }}>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} />
+            Only my uploads
+          </label>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={onlyBookmarked}
+              onChange={(e) => setOnlyBookmarked(e.target.checked)}
+            />
+            Bookmarked
+          </label>
+          <button type="button" onClick={fetchMaterials} style={{ marginLeft: 'auto' }}>
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* List */}
+      <h3 style={{ marginTop: '1.4rem' }}>Shared Materials</h3>
+      {isLoading && <p>Loading materials...</p>}
+      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {!isLoading && materials.length === 0 && <p>No materials match your filters.</p>}
+
+      <div className="reviews-list">
+        {materials.map((m) => {
+          const iLike = (m.likedBy || []).includes(myUid);
+          const iSaved = (m.bookmarkedBy || []).includes(myUid);
+          return (
+            <div key={m.id} className="review-card analytics-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <span
+                    style={{
+                      backgroundColor: '#eef2ff',
+                      padding: '0.2rem 0.6rem',
+                      borderRadius: 12,
+                      fontSize: '0.8rem',
+                      color: '#4338ca'
+                    }}
+                  >
+                    {m.category}
+                  </span>
+                  <h4 style={{ margin: '0.5rem 0 0.25rem 0' }}>{m.title}</h4>
+                  <p style={{ margin: 0, color: '#5f6368' }}>For Course: {m.course}</p>
+                  <p style={{ margin: '0.3rem 0 0', fontSize: 12, color: '#6b7280' }}>
+                    Posted by: {m.authorName || 'Anonymous'}
+                  </p>
+                </div>
+
+                {(currentUser && (myUid === m.authorId || currentUser.role === 'admin')) && (
+                  <button
+                    onClick={() => handleDelete(m.id)}
+                    style={{
+                      backgroundColor: 'transparent',
+                      color: '#d9534f',
+                      border: '1px solid #d9534f',
+                      padding: '0.4rem 0.8rem',
+                      borderRadius: 8,
+                      fontSize: '0.9rem',
+                      height: 36
+                    }}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+
+              {/* actions row */}
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => toggleLike(m)}
+                  title={iLike ? 'Unlike' : 'Like'}
+                  style={{ padding: '6px 10px' }}
+                >
+                  {iLike ? '❤️' : '🤍'} {m.likes || 0}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleBookmark(m)}
+                  title={iSaved ? 'Remove bookmark' : 'Bookmark'}
+                  style={{ padding: '6px 10px' }}
+                >
+                  {iSaved ? '🔖 Saved' : '🔖 Save'}
+                </button>
+                <span style={{ fontSize: 12, color: '#6b7280' }}>
+                  Opens: {m.clicks || 0}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => reportMaterial(m)}
+                  title="Report"
+                  style={{ marginLeft: 'auto', padding: '6px 10px', border: '1px solid #ef4444', color: '#ef4444', background: 'transparent', borderRadius: 8 }}
+                >
+                  Report
+                </button>
+              </div>
+
+              <button
+                onClick={() => openMaterial(m)}
+                style={{
+                  textDecoration: 'none',
+                  display: 'inline-block',
+                  width: '100%',
+                  textAlign: 'center',
+                  padding: '0.75rem',
+                  backgroundColor: '#007aff',
+                  color: 'white',
+                  borderRadius: 8,
+                  marginTop: 12,
+                  fontWeight: 500
+                }}
+              >
+                Open Material
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default MaterialRepository;

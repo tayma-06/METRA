@@ -200,13 +200,22 @@ function Dashboard() {
                 <div className="section-header">
                     <h3>Meet Our Team</h3>
                 </div>
-                <div className="team-members-row">
-                    {teamMembers.map((member, index) => (
-                        <div key={index} className="team-member-simple">
-                            <div className="member-name">{member.name}</div>
-                        </div>
-                    ))}
-                </div>
+             <div className="team-members-row">
+    {teamMembers.map((member, index) => (
+        <div key={index} className="team-member-simple">
+            <Link to={`/profile/${member.uid}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <div className="member-name">{member.name}</div>
+                {/* Show their top 2 achievements as badges */}
+                {member.achievements?.slice(0, 2).map(a => (
+                    <span key={a.id} className={`badge ${a.type}`} style={{ marginLeft: 4 }}>
+                        {a.title}
+                    </span>
+                ))}
+            </Link>
+        </div>
+    ))}
+</div>
+
                 <div className="university-info">
                     Islamic University of Technology
                 </div>
@@ -219,6 +228,15 @@ function Dashboard() {
                     margin: 0 auto;
                     padding: 2rem;
                 }
+.badge {
+  display: inline-block;
+  background: #f0f4ff;
+  color: #007aff;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
 
                 /* Simple Welcome Section */
                 .welcome-section-simple {

@@ -1,542 +1,697 @@
+// server.js
+// METRA backend – Express + Firestore + optional Gemini
+// -----------------------------------------------------
+
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 require('dotenv').config();
 
-// --- SECURE Firebase Admin Setup ---
+// ---------- Firebase Admin (server-side SDK) ----------
 const admin = require('firebase-admin');
 let db;
 let FieldValue;
 
 try {
-    // Get Firebase config from environment variable
-    const firebaseConfig = process.env.FIREBASE_SERVICE_ACCOUNT;
-
-    if (!firebaseConfig || firebaseConfig === 'placeholder') {
-        throw new Error('Firebase configuration not found in environment variables. Please add FIREBASE_SERVICE_ACCOUNT to your .env file.');
-    }
-
-    const serviceAccount = JSON.parse(firebaseConfig);
-
-    // Fix the private key formatting - convert \\n to actual newlines
-    if (serviceAccount.private_key) {
-        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-    }
-
-    admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-    });
-
-    db = admin.firestore();
-    FieldValue = admin.firestore.FieldValue;
-    console.log('✅ Firebase Admin SDK initialized successfully from environment variables.');
-
-} catch (error) {
-    console.error('❌ Firebase Admin SDK initialization failed:');
-    console.error('   Reason:', error.message);
-    console.error('   💡 To fix: Check your FIREBASE_SERVICE_ACCOUNT formatting in .env');
-    console.error('   🔒 Firestore endpoints will NOT work until Firebase is properly configured');
-
-    // Set mocks for safety
-    db = null;
-    FieldValue = {
-        serverTimestamp: () => new Date(),
-        arrayUnion: (x) => [x],
-        arrayRemove: (x) => [x]
-    };
+  const svc = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!svc || svc === 'placeholder') throw new Error('FIREBASE_SERVICE_ACCOUNT missing');
+  const serviceAccount = JSON.parse(svc);
+  if (serviceAccount.private_key) {
+    serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+  }
+  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+  db = admin.firestore();
+  FieldValue = admin.firestore.FieldValue;
+  console.log('✅ Firebase Admin initialized');
+} catch (err) {
+  console.error('❌ Firebase Admin init failed:', err.message);
+  // Soft-degrade so the server can boot (useful for front-end dev)
+  db = null;
+  FieldValue = {
+    serverTimestamp: () => new Date(),
+    arrayUnion: (...x) => x,
+    arrayRemove: (...x) => x,
+    delete: () => null,
+  };
 }
-// --- End Firebase Admin Setup ---
 
+// ---------- App & middleware ----------
 const app = express();
-app.use(express.json());
 app.use(cors());
+app.use(express.json({ limit: '4mb' }));
 
 const PORT = process.env.PORT || 8000;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
-// Helper function to check for DB readiness
-const checkDbReady = (res) => {
-    if (!db) {
-        res.status(503).json({ error: 'Database service unavailable. Please configure Firebase in your .env file and restart the server.' });
-        return false;
-    }
-    return true;
+// Quick guard for any DB route
+const ensureDb = (res) => {
+  if (!db) {
+    res.status(503).json({
+      error:
+        'Database unavailable. Put FIREBASE_SERVICE_ACCOUNT JSON in .env and restart the server.',
+    });
+    return false;
+  }
+  return true;
 };
 
-// --- Mock Data for features NOT yet in Firestore ---
-const mockAnalysis = {
-    title: "Personalized Plan for Quiz 3",
-    summary: "Your score was 72%, just below the class average of 78%. Analysis shows strong performance in basic data structures, but weaknesses in Dynamic Programming.",
-    plan: [
-        "Focus on Dynamic Programming. Review the 'Knapsack' and 'Longest Common Subsequence' problems.",
-        "Practice 3 medium-level DP problems on LeetCode or HackerRank.",
-        "Review the 'Big O' notation for recursive algorithms, as this was a common point of error."
-    ]
-};
-
-// === API ENDPOINTS ===
-
-// --- AI Solver Endpoint (Using Gemini) ---
-app.post('/api/solve', async (req, res) => {
-    const { question } = req.body;
-    console.log('Received question:', question);
-
-    if (!question) {
-        return res.status(400).json({ error: 'Question is required.' });
-    }
-
-    // Check if API key is set in environment
-    if (!GEMINI_API_KEY) {
-        return res.json({
-            answer: `This is a **mock answer** for: "${question}". \n\n The backend successfully received your question. To get a real answer, you need to: \n 1. Set your Gemini API key in the .env file as GEMINI_API_KEY=your_actual_key_here \n 2. Restart your server.\n\n ### Sample Formatted Answer:\n* **Point 1:** This is how lists look.\n* **Point 2:** And **bold text**.`
-        });
-    }
-
-    // --- REAL GEMINI API CALL ---
-    try {
-        const modelName = 'gemini-2.5-flash-preview-09-2025';
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
-
-        const fullPrompt = `Please answer this student's question. Use Markdown for formatting (like lists, bold, and headings) to make the answer easy to read.\n\nQuestion: ${question}`;
-
-        const payload = {
-            contents: [{
-                parts: [{ text: fullPrompt }]
-            }]
-        };
-
-        const apiRes = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        if (!apiRes.ok) {
-            console.error('Gemini API Error Body:', await apiRes.text());
-            throw new Error(`AI API error! Status: ${apiRes.status}`);
-        }
-
-        const data = await apiRes.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-        if (text) {
-            res.json({ answer: text });
-        } else {
-            res.json({ answer: "I'm sorry, I can't provide a response to that. Please try a different question." });
-        }
-
-    } catch (error) {
-        console.error('Gemini API error:', error);
-        res.status(500).json({ error: 'Failed to get answer from AI. ' + error.message });
-    }
+// ---------- Health ----------
+app.get('/', (_req, res) => {
+  res.json({
+    ok: true,
+    service: 'METRA backend',
+    firestore: !!db,
+    gemini: !!GEMINI_API_KEY,
+  });
 });
 
-// --- Course Reviews Endpoints (USING FIRESTORE) ---
-app.get('/api/reviews', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    try {
-        const snapshot = await db.collection('reviews').orderBy('createdAt', 'desc').get();
-        const reviews = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        res.json(reviews);
-    } catch (error) {
-        console.error('Failed to fetch reviews:', error);
-        res.status(500).json({ error: 'Failed to fetch reviews.' });
+// ---------- Mock for progress ----------
+const mockAnalysis = {
+  title: 'Personalized Plan for Quiz 3',
+  summary:
+    'Your score was 72%, a bit below the class average (78%). Strong basics—focus next on Dynamic Programming.',
+  plan: [
+    'Deepen DP: Knapsack & LCS patterns.',
+    'Solve 3 medium DP problems on LeetCode.',
+    'Revise Big-O for recursive relations.',
+  ],
+};
+
+// =====================================================
+// AI Solver (Gemini)
+// =====================================================
+app.post('/api/solve', async (req, res) => {
+  const { question } = req.body || {};
+  if (!question) return res.status(400).json({ error: 'Question is required.' });
+
+  // Mock if no key
+  if (!GEMINI_API_KEY) {
+    return res.json({
+      answer:
+        `**Mock answer** for: "${question}"\n\n` +
+        'Backend is wired. Add GEMINI_API_KEY to .env for real answers.',
+    });
+  }
+
+  try {
+    const model = 'gemini-2.5-flash-preview-09-2025';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+
+    const payload = {
+      contents: [{ parts: [{ text: `Use Markdown. Q: ${question}` }] }],
+    };
+
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!r.ok) {
+      const body = await r.text();
+      console.error('Gemini error:', r.status, body);
+      throw new Error(`AI API error ${r.status}`);
     }
+
+    const data = await r.json();
+    const text =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "I couldn't generate a response. Please try another question.";
+    res.json({ answer: text });
+  } catch (e) {
+    console.error('Gemini API error:', e);
+    res.status(500).json({ error: 'Failed to get answer from AI.' });
+  }
+});
+
+// =====================================================
+// Course Reviews
+// =====================================================
+app.get('/api/reviews', async (_req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const snap = await db.collection('reviews').orderBy('createdAt', 'desc').get();
+    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to fetch reviews.' });
+  }
 });
 
 app.post('/api/reviews', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    try {
-        const newReview = req.body;
-        newReview.createdAt = FieldValue.serverTimestamp();
-
-        const docRef = await db.collection('reviews').add(newReview);
-        res.status(201).json({ id: docRef.id, ...newReview });
-    } catch (error) {
-        console.error('Failed to add review:', error);
-        res.status(500).json({ error: 'Failed to add review.' });
-    }
+  if (!ensureDb(res)) return;
+  try {
+    const review = { ...req.body, createdAt: FieldValue.serverTimestamp() };
+    const ref = await db.collection('reviews').add(review);
+    res.status(201).json({ id: ref.id, ...review });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to add review.' });
+  }
 });
 
-// --- Senior Hub Endpoints (USING FIRESTORE) ---
-app.get('/api/hub/posts', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    try {
-        const snapshot = await db.collection('hub_posts').orderBy('createdAt', 'desc').get();
-        const posts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        res.json(posts);
-    } catch (error) {
-        console.error('Failed to fetch posts:', error);
-        res.status(500).json({ error: 'Failed to fetch posts.' });
-    }
+// =====================================================
+// Senior Hub (posts & replies)
+// =====================================================
+app.get('/api/hub/posts', async (_req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const snap = await db.collection('hub_posts').orderBy('createdAt', 'desc').get();
+    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to fetch posts.' });
+  }
 });
 
 app.post('/api/hub/posts', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    try {
-        const newPost = req.body;
-        newPost.createdAt = FieldValue.serverTimestamp();
-
-        const postToSave = {
-            course: newPost.course,
-            question: newPost.question,
-            authorId: newPost.authorId,
-            authorName: newPost.authorName,
-            createdAt: newPost.createdAt,
-            reply: null
-        };
-
-        const docRef = await db.collection('hub_posts').add(postToSave);
-        res.status(201).json({ id: docRef.id, ...postToSave });
-    } catch (error) {
-        console.error('Failed to add post:', error);
-        res.status(500).json({ error: 'Failed to add post.' });
-    }
+  if (!ensureDb(res)) return;
+  try {
+    const { course, question, authorId, authorName } = req.body || {};
+    const post = {
+      course,
+      question,
+      authorId,
+      authorName,
+      reply: null,
+      createdAt: FieldValue.serverTimestamp(),
+    };
+    const ref = await db.collection('hub_posts').add(post);
+    res.status(201).json({ id: ref.id, ...post });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to add post.' });
+  }
 });
 
-// --- DELETE a Post ---
 app.delete('/api/hub/posts/:id', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    try {
-        const { id } = req.params;
-        const { userId } = req.body;
+  if (!ensureDb(res)) return;
+  try {
+    const { id } = req.params;
+    const { userId } = req.body || {};
+    if (!userId) return res.status(400).json({ message: 'User ID required.' });
 
-        if (!userId) {
-            return res.status(400).json({ message: "User ID is required for deletion." });
-        }
+    const ref = db.collection('hub_posts').doc(id);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ message: 'Post not found.' });
+    if (doc.data().authorId !== userId) return res.status(403).json({ message: 'Not authorized.' });
 
-        const docRef = db.collection('hub_posts').doc(id);
-        const doc = await docRef.get();
-
-        if (!doc.exists) {
-            return res.status(404).json({ message: "Post not found." });
-        }
-
-        const data = doc.data();
-        if (data.authorId !== userId) {
-            return res.status(403).json({ message: "You are not authorized to delete this post." });
-        }
-
-        await docRef.delete();
-        res.status(200).json({ message: "Post deleted successfully." });
-
-    } catch (error) {
-        console.error('Failed to delete post:', error);
-        res.status(500).json({ error: 'Failed to delete post.' });
-    }
+    await ref.delete();
+    res.json({ message: 'Post deleted.' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to delete post.' });
+  }
 });
 
-// --- Reply to a Post ---
 app.put('/api/hub/posts/:id/reply', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    try {
-        const { id } = req.params;
-        const { replyText, authorId, authorName } = req.body;
-
-        if (!replyText || !authorId || !authorName) {
-            return res.status(400).json({ message: "Missing required reply fields." });
-        }
-
-        const replyObject = {
-            text: replyText,
-            authorId: authorId,
-            authorName: authorName,
-            repliedAt: FieldValue.serverTimestamp()
-        };
-
-        const postRef = db.collection('hub_posts').doc(id);
-        const postDoc = await postRef.get();
-
-        if (postDoc.exists && postDoc.data().reply) {
-            return res.status(409).json({ message: "This post already has a senior reply. Only one reply is allowed." });
-        }
-
-        await postRef.update({ reply: replyObject });
-        res.status(200).json({ message: "Reply added successfully.", reply: replyObject });
-
-    } catch (error) {
-        console.error('Failed to add reply:', error);
-        res.status(500).json({ error: 'Failed to add reply.' });
+  if (!ensureDb(res)) return;
+  try {
+    const { id } = req.params;
+    const { replyText, authorId, authorName } = req.body || {};
+    if (!replyText || !authorId || !authorName) {
+      return res.status(400).json({ message: 'Missing reply fields.' });
     }
+    const ref = db.collection('hub_posts').doc(id);
+    const snap = await ref.get();
+    if (snap.exists && snap.data().reply) {
+      return res.status(409).json({ message: 'This post already has a reply.' });
+    }
+
+    const reply = {
+      text: replyText,
+      authorId,
+      authorName,
+      repliedAt: FieldValue.serverTimestamp(),
+    };
+    await ref.update({ reply });
+    res.json({ message: 'Reply added.', reply });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to add reply.' });
+  }
 });
 
-// --- DELETE a Reply ---
 app.delete('/api/hub/posts/:id/reply', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    try {
-        const { id } = req.params;
-        const { userId } = req.body;
+  if (!ensureDb(res)) return;
+  try {
+    const { id } = req.params;
+    const { userId } = req.body || {};
+    if (!userId) return res.status(400).json({ message: 'User ID required.' });
 
-        if (!userId) {
-            return res.status(400).json({ message: "User ID is required for deletion." });
-        }
+    const ref = db.collection('hub_posts').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ message: 'Post not found.' });
 
-        const postRef = db.collection('hub_posts').doc(id);
-        const doc = await postRef.get();
+    const data = snap.data();
+    if (!data.reply) return res.status(404).json({ message: 'No reply to delete.' });
+    if (data.reply.authorId !== userId) return res.status(403).json({ message: 'Not authorized.' });
 
-        if (!doc.exists) {
-            return res.status(404).json({ message: "Post not found." });
-        }
-
-        const postData = doc.data();
-        if (!postData.reply) {
-            return res.status(404).json({ message: "No reply found to delete." });
-        }
-
-        if (postData.reply.authorId !== userId) {
-            return res.status(403).json({ message: "You are not authorized to delete this reply." });
-        }
-
-        await postRef.update({ reply: null });
-        res.status(200).json({ message: "Reply deleted successfully." });
-
-    } catch (error) {
-        console.error('Failed to delete reply:', error);
-        res.status(500).json({ error: 'Failed to delete reply.' });
-    }
+    await ref.update({ reply: null });
+    res.json({ message: 'Reply deleted.' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to delete reply.' });
+  }
 });
 
-// --- Progress Analyst Endpoint (Mock Data) ---
-app.post('/api/progress', (req, res) => {
-    res.json(mockAnalysis);
-});
-
-// --- Material Repository Endpoints ---
+// =====================================================
+// Materials (filters + social actions)
+// =====================================================
 app.get('/api/materials', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    try {
-        const snapshot = await db.collection('materials').orderBy('createdAt', 'desc').get();
-        const materials = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        res.json(materials);
-    } catch (error) {
-        console.error('Failed to fetch materials:', error);
-        res.status(500).json({ error: 'Failed to fetch materials.' });
+  if (!ensureDb(res)) return;
+  try {
+    const {
+      q = '',
+      course = '',
+      category = '',
+      author = '',
+      sort = 'createdAt_desc',
+      limit = '50',
+    } = req.query;
+
+    let ref = db.collection('materials');
+
+    if (course) ref = ref.where('course', '==', course);
+    if (category) ref = ref.where('category', '==', category);
+    if (author) ref = ref.where('authorName', '==', author);
+
+    if (sort === 'likes_desc') ref = ref.orderBy('likes', 'desc');
+    else if (sort === 'clicks_desc') ref = ref.orderBy('clicks', 'desc');
+    else ref = ref.orderBy('createdAt', 'desc');
+
+    const snap = await ref.limit(parseInt(limit, 10)).get();
+    let items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    if (q) {
+      const needle = String(q).toLowerCase();
+      items = items.filter(
+        (m) =>
+          (m.title || '').toLowerCase().includes(needle) ||
+          (m.course || '').toLowerCase().includes(needle)
+      );
     }
+
+    res.json(items);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to fetch materials.' });
+  }
 });
 
 app.post('/api/materials/upload', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    try {
-        const { course, title, category, link, authorId, authorName } = req.body;
-        if (!course || !title || !category || !link || !authorId || !authorName) {
-            return res.status(400).json({ message: "Missing required fields." });
-        }
-
-        const newMaterial = {
-            course,
-            title,
-            category,
-            link,
-            authorId,
-            authorName,
-            createdAt: FieldValue.serverTimestamp()
-        };
-
-        const docRef = await db.collection('materials').add(newMaterial);
-        res.status(201).json({ id: docRef.id, ...newMaterial });
-    } catch (error) {
-        console.error('Failed to upload material:', error);
-        res.status(500).json({ error: 'Failed to upload material.' });
+  if (!ensureDb(res)) return;
+  try {
+    const { course, title, category, link, authorId, authorName } = req.body || {};
+    if (!course || !title || !category || !link || !authorId || !authorName) {
+      return res.status(400).json({ message: 'Missing required fields.' });
     }
+
+    const docData = {
+      course,
+      title,
+      category,
+      link,
+      authorId,
+      authorName,
+      createdAt: FieldValue.serverTimestamp(),
+      likes: 0,
+      clicks: 0,
+      likedBy: [],
+      bookmarkedBy: [],
+      reports: 0,
+    };
+
+    const ref = await db.collection('materials').add(docData);
+    res.status(201).json({ id: ref.id, ...docData });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to upload material.' });
+  }
 });
 
 app.delete('/api/materials/:id', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    try {
-        const { id } = req.params;
-        const { userId } = req.body;
+  if (!ensureDb(res)) return;
+  try {
+    const { id } = req.params;
+    const { userId } = req.body || {};
+    if (!userId) return res.status(400).json({ message: 'User ID required.' });
 
-        if (!userId) {
-            return res.status(400).json({ message: "User ID is required for deletion." });
-        }
+    const ref = db.collection('materials').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ message: 'Material not found.' });
+    if (snap.data().authorId !== userId) return res.status(403).json({ message: 'Not authorized.' });
 
-        const docRef = db.collection('materials').doc(id);
-        const doc = await docRef.get();
-
-        if (!doc.exists) {
-            return res.status(404).json({ message: "Material not found." });
-        }
-
-        const data = doc.data();
-        if (data.authorId !== userId) {
-            return res.status(403).json({ message: "You are not authorized to delete this material." });
-        }
-
-        await docRef.delete();
-        res.status(200).json({ message: "Material deleted successfully." });
-
-    } catch (error) {
-        console.error('Failed to delete material:', error);
-        res.status(500).json({ error: 'Failed to delete material.' });
-    }
+    await ref.delete();
+    res.json({ message: 'Material deleted.' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to delete material.' });
+  }
 });
 
-// --- Smart Study Groups Endpoints ---
+app.post('/api/materials/:id/like', async (req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const { userId, like = true } = req.body || {};
+    const ref = db.collection('materials').doc(req.params.id);
+    await ref.update({
+      likes: admin.firestore.FieldValue.increment(like ? 1 : -1),
+      likedBy: like ? FieldValue.arrayUnion(userId) : FieldValue.arrayRemove(userId),
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to like material.' });
+  }
+});
+
+app.post('/api/materials/:id/bookmark', async (req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const { userId, bookmark = true } = req.body || {};
+    const ref = db.collection('materials').doc(req.params.id);
+    await ref.update({
+      bookmarkedBy: bookmark ? FieldValue.arrayUnion(userId) : FieldValue.arrayRemove(userId),
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to bookmark material.' });
+  }
+});
+
+app.post('/api/materials/:id/click', async (_req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const ref = db.collection('materials').doc(req.params.id);
+    await ref.update({ clicks: admin.firestore.FieldValue.increment(1) });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to track click.' });
+  }
+});
+
+app.post('/api/materials/:id/report', async (req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const { reason = 'broken' } = req.body || {};
+    const ref = db.collection('materials').doc(req.params.id);
+    await ref.update({
+      reports: admin.firestore.FieldValue.increment(1),
+      lastReportReason: reason,
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to report material.' });
+  }
+});
+
+// =====================================================
+// Study Groups
+// =====================================================
 app.post('/api/study-groups', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    const { name, description, capacity, creatorId } = req.body;
+  if (!ensureDb(res)) return;
+  try {
+    const { name, description, capacity, creatorId } = req.body || {};
     if (!name || !description || !capacity || !creatorId) {
-        return res.status(400).json({ message: 'Missing required fields.' });
+      return res.status(400).json({ message: 'Missing required fields.' });
     }
-
-    try {
-        const newGroup = {
-            name,
-            description,
-            capacity: parseInt(capacity, 10),
-            createdAt: FieldValue.serverTimestamp(),
-            memberIds: [creatorId]
-        };
-
-        const docRef = await db.collection('study_groups').add(newGroup);
-        res.status(201).json({ id: docRef.id, ...newGroup });
-
-    } catch (error) {
-        console.error('Failed to create group:', error);
-        res.status(500).json({ message: 'Failed to create group.' });
-    }
+    const group = {
+      name,
+      description,
+      capacity: parseInt(capacity, 10),
+      createdAt: FieldValue.serverTimestamp(),
+      memberIds: [creatorId],
+      // Optional helper to show an active call room id
+      activeCallId: null,
+    };
+    const ref = await db.collection('study_groups').add(group);
+    res.status(201).json({ id: ref.id, ...group });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Failed to create group.' });
+  }
 });
 
-app.get('/api/study-groups', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    try {
-        const snapshot = await db.collection('study_groups').orderBy('createdAt', 'desc').get();
-        const groups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        res.json(groups);
-    } catch (error) {
-        console.error('Failed to fetch study groups:', error);
-        res.status(500).json({ error: 'Failed to fetch study groups.' });
-    }
+app.get('/api/study-groups', async (_req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const snap = await db.collection('study_groups').orderBy('createdAt', 'desc').get();
+    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to fetch study groups.' });
+  }
+});
+
+app.get('/api/study-groups/:groupId', async (req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const { groupId } = req.params;
+    const ref = db.collection('study_groups').doc(groupId);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ message: 'Group not found.' });
+    res.json({ id: snap.id, ...snap.data() });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Failed to get group details.' });
+  }
 });
 
 app.post('/api/study-groups/join', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    const { groupId, userId } = req.body;
-    if (!groupId || !userId) {
-        return res.status(400).json({ message: 'Group ID and User ID are required.' });
-    }
+  if (!ensureDb(res)) return;
+  try {
+    const { groupId, userId } = req.body || {};
+    if (!groupId || !userId) return res.status(400).json({ message: 'Group ID and User ID are required.' });
 
     const groupRef = db.collection('study_groups').doc(groupId);
+    const updated = await db.runTransaction(async (tx) => {
+      const doc = await tx.get(groupRef);
+      if (!doc.exists) throw new Error('Group not found.');
+      const data = doc.data();
+      const members = data.memberIds || [];
+      if (members.includes(userId)) throw new Error('You are already in this group.');
+      if (members.length >= data.capacity) throw new Error('This group is already full.');
+      tx.update(groupRef, { memberIds: FieldValue.arrayUnion(userId) });
+      return { ...data, memberIds: [...members, userId] };
+    });
 
-    try {
-        const updatedGroup = await db.runTransaction(async (transaction) => {
-            const groupDoc = await transaction.get(groupRef);
-            if (!groupDoc.exists) {
-                throw new Error("Group not found.");
-            }
-
-            const groupData = groupDoc.data();
-            const memberIds = groupData.memberIds || [];
-
-            if (memberIds.includes(userId)) {
-                throw new Error("You are already in this group.");
-            }
-
-            if (memberIds.length >= groupData.capacity) {
-                throw new Error("This group is already full.");
-            }
-
-            transaction.update(groupRef, {
-                memberIds: FieldValue.arrayUnion(userId)
-            });
-
-            const newMemberIds = [...memberIds, userId];
-            return { ...groupData, memberIds: newMemberIds };
-        });
-
-        res.json({
-            message: 'Successfully joined the group!',
-            group: { id: groupRef.id, ...updatedGroup }
-        });
-
-    } catch (error) {
-        console.error('Failed to join group:', error);
-        res.status(400).json({ message: error.message || 'Failed to join group.' });
-    }
+    res.json({ message: 'Successfully joined the group!', group: { id: groupRef.id, ...updated } });
+  } catch (e) {
+    console.error(e.message);
+    res.status(400).json({ message: e.message || 'Failed to join group.' });
+  }
 });
 
-app.get('/api/study-groups/:id', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    try {
-        const { id } = req.params;
-        const groupRef = db.collection('study_groups').doc(id);
-        const doc = await groupRef.get();
+// ---------- Optional: Call logging / active room id ----------
+app.post('/api/study-groups/:groupId/call', async (req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const { groupId } = req.params;
+    const { ephemeral = false, startedBy } = req.body || {};
+    const callId = ephemeral ? `${groupId}-${Date.now()}` : groupId;
 
-        if (!doc.exists) {
-            return res.status(404).json({ message: 'Group not found' });
+    const groupRef = db.collection('study_groups').doc(groupId);
+    const callRef = groupRef.collection('calls').doc(callId);
+
+    await callRef.set(
+      {
+        callId,
+        startedAt: FieldValue.serverTimestamp(),
+        startedBy: startedBy || null,
+        ephemeral: !!ephemeral,
+      },
+      { merge: true }
+    );
+    await groupRef.update({ activeCallId: callId });
+
+    res.json({ callId });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to init call.' });
+  }
+});
+
+app.post('/api/study-groups/:groupId/call/end', async (req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const { groupId } = req.params;
+    const { callId } = req.body || {};
+    const id = callId || groupId;
+
+    const groupRef = db.collection('study_groups').doc(groupId);
+    const callRef = groupRef.collection('calls').doc(id);
+
+    await callRef.set({ endedAt: FieldValue.serverTimestamp() }, { merge: true });
+    await groupRef.update({ activeCallId: null });
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to end call.' });
+  }
+});
+
+// =====================================================
+// Chat messages (text / file / audio) + delivery/read/typing
+// =====================================================
+app.post('/api/study-groups/:groupId/messages', async (req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const { groupId } = req.params;
+    const {
+      text,
+      authorId,
+      authorName,
+      kind, // 'text' | 'file' | 'audio'
+      fileUrl,
+      fileName,
+      mimeType,
+      sizeBytes,
+      durationSec,
+    } = req.body || {};
+
+    if (!authorId) return res.status(400).json({ message: 'Missing authorId.' });
+    if (!text && !fileUrl) return res.status(400).json({ message: 'Message must have text or fileUrl.' });
+
+    const groupRef = db.collection('study_groups').doc(groupId);
+    const groupSnap = await groupRef.get();
+    if (!groupSnap.exists) return res.status(404).json({ message: 'Group not found.' });
+    const group = groupSnap.data();
+
+    const base = {
+      text: text ? String(text).slice(0, 4000) : '',
+      authorId,
+      authorName: authorName || 'Anonymous',
+      createdAt: FieldValue.serverTimestamp(),
+      status: 'sent',
+      deliveredTo: [],
+      readBy: [],
+    };
+
+    const attachment = fileUrl
+      ? {
+          kind: kind || 'file',
+          fileUrl,
+          fileName: fileName || null,
+          mimeType: mimeType || null,
+          sizeBytes: typeof sizeBytes === 'number' ? sizeBytes : null,
+          durationSec: typeof durationSec === 'number' ? durationSec : null,
         }
+      : { kind: 'text' };
 
-        res.json({ id: doc.id, ...doc.data() });
-    } catch (error) {
-        console.error('Failed to get group details:', error);
-        res.status(500).json({ message: 'Failed to get group details.' });
+    const payload = { ...base, ...attachment };
+
+    const msgRef = await groupRef.collection('messages').add(payload);
+
+    const recipients = (group.memberIds || []).filter((id) => id !== authorId);
+    if (recipients.length) {
+      await msgRef.update({ status: 'delivered', deliveredTo: recipients });
     }
+
+    res.status(201).json({
+      id: msgRef.id,
+      ...payload,
+      status: recipients.length ? 'delivered' : 'sent',
+      deliveredTo: recipients,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Failed to post message.' });
+  }
 });
 
-app.post('/api/study-groups/:id/messages', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    try {
-        const { id } = req.params;
-        const { text, authorId, authorName } = req.body;
+app.put('/api/study-groups/:groupId/messages/:messageId/delivered', async (req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const { groupId, messageId } = req.params;
+    const { userId } = req.body || {};
+    if (!userId) return res.status(400).json({ message: 'userId required' });
 
-        if (!text || !authorId || !authorName) {
-            return res.status(400).json({ message: 'Missing message data.' });
-        }
-
-        const messageData = {
-            text,
-            authorId,
-            authorName,
-            createdAt: FieldValue.serverTimestamp()
-        };
-
-        const messagesRef = db.collection('study_groups').doc(id).collection('messages');
-        const docRef = await messagesRef.add(messageData);
-
-        res.status(201).json({ id: docRef.id, ...messageData });
-    } catch (error) {
-        console.error('Failed to post message:', error);
-        res.status(500).json({ message: 'Failed to post message.' });
-    }
+    const ref = db.collection('study_groups').doc(groupId).collection('messages').doc(messageId);
+    await ref.update({ status: 'delivered', deliveredTo: FieldValue.arrayUnion(userId) });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Failed to update delivery.' });
+  }
 });
 
-// --- Dashboard Summary Endpoint ---
-app.get('/api/dashboard-summary', async (req, res) => {
-    if (!checkDbReady(res)) return;
-    try {
-        const postSnapshot = await db.collection('hub_posts')
-            .orderBy('createdAt', 'desc')
-            .limit(1)
-            .get();
-        const latestPost = postSnapshot.docs[0] ? { id: postSnapshot.docs[0].id, ...postSnapshot.docs[0].data() } : null;
+app.put('/api/study-groups/:groupId/messages/:messageId/seen', async (req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const { groupId, messageId } = req.params;
+    const { userId } = req.body || {};
+    if (!userId) return res.status(400).json({ message: 'userId required' });
 
-        const materialSnapshot = await db.collection('materials')
-            .orderBy('createdAt', 'desc')
-            .limit(1)
-            .get();
-        const latestMaterial = materialSnapshot.docs[0] ? { id: materialSnapshot.docs[0].id, ...materialSnapshot.docs[0].data() } : null;
-
-        const groupSnapshot = await db.collection('study_groups')
-            .limit(1)
-            .get();
-        const openGroup = groupSnapshot.docs[0] ? { id: groupSnapshot.docs[0].id, ...groupSnapshot.docs[0].data() } : null;
-
-        res.json({
-            latestPost,
-            latestMaterial,
-            openGroup
-        });
-
-    } catch (error) {
-        console.error('Failed to fetch dashboard summary:', error);
-        res.status(500).json({ error: 'Failed to fetch dashboard summary.' });
-    }
+    const ref = db.collection('study_groups').doc(groupId).collection('messages').doc(messageId);
+    await ref.update({ status: 'seen', readBy: FieldValue.arrayUnion(userId) });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Failed to update read.' });
+  }
 });
 
-// --- Start Server ---
+// Typing indicator (stored in /meta/typing)
+app.post('/api/study-groups/:groupId/typing', async (req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const { groupId } = req.params;
+    const { userId, isTyping, userName } = req.body || {};
+    if (!userId) return res.status(400).json({ message: 'userId required' });
+
+    const ref = db.collection('study_groups').doc(groupId).collection('meta').doc('typing');
+    await ref.set(
+      { [userId]: isTyping ? userName || 'Someone' : FieldValue.delete() },
+      { merge: true }
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Failed to set typing.' });
+  }
+});
+
+// =====================================================
+// Dashboard summary (latest items)
+// =====================================================
+app.get('/api/dashboard-summary', async (_req, res) => {
+  if (!ensureDb(res)) return;
+  try {
+    const postSnap = await db.collection('hub_posts').orderBy('createdAt', 'desc').limit(1).get();
+    const latestPost = postSnap.docs[0] ? { id: postSnap.docs[0].id, ...postSnap.docs[0].data() } : null;
+
+    const matSnap = await db.collection('materials').orderBy('createdAt', 'desc').limit(1).get();
+    const latestMaterial = matSnap.docs[0]
+      ? { id: matSnap.docs[0].id, ...matSnap.docs[0].data() }
+      : null;
+
+    const groupSnap = await db.collection('study_groups').orderBy('createdAt', 'desc').limit(1).get();
+    const openGroup = groupSnap.docs[0]
+      ? { id: groupSnap.docs[0].id, ...groupSnap.docs[0].data() }
+      : null;
+
+    res.json({ latestPost, latestMaterial, openGroup });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to fetch dashboard summary.' });
+  }
+});
+
+// =====================================================
+// Progress (mock)
+// =====================================================
+app.post('/api/progress', (_req, res) => {
+  res.json(mockAnalysis);
+});
+
+// ---------- Start server ----------
 app.listen(PORT, () => {
-    console.log(`🚀 METRA backend server listening on http://localhost:${PORT}`);
-    console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🗄️  Database: ${db ? 'Firebase Firestore ✅' : 'Not configured ❌'}`);
-    console.log(`🤖 AI Solver: ${GEMINI_API_KEY ? 'Gemini API ✅' : 'Not configured ❌'}`);
+  console.log(`🚀 METRA backend listening at http://localhost:${PORT}`);
+  console.log(`🗄️  Firestore: ${db ? 'READY ✅' : 'NOT CONFIGURED ❌'}`);
+  console.log(`🤖 Gemini: ${GEMINI_API_KEY ? 'READY ✅' : 'MOCK MODE ❕'}`);
 });
