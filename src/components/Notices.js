@@ -1,8 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
-// IMPORTANT: use || so empty string falls back correctly
-const BACKEND_URL = import.meta?.env?.VITE_BACKEND_URL || 'http://localhost:8000';
+/**
+ * BACKEND_URL *must* point to your API server root, e.g.:
+ *   VITE_BACKEND_URL=http://localhost:8000
+ *
+ * We normalize it and always call /api/... below.
+ */
+const RAW_BACKEND = import.meta?.env?.VITE_BACKEND_URL || 'http://localhost:8000';
+const API_BASE = `${String(RAW_BACKEND).replace(/\/+$/, '')}/api`; // e.g. http://localhost:8000/api
 
 // If you want only admins to post, set this to false and let backend enforce.
 const SHOW_CREATE_FORM = true;
@@ -13,6 +19,18 @@ const CATS = [
   { value: 'notice', label: 'Notice' },
   { value: 'other', label: 'Other' },
 ];
+
+/** tiny fetch helper with good error text */
+async function fetchJSON(url, init) {
+  const res = await fetch(url, init);
+  const text = await res.text();
+  if (!res.ok) {
+    // common backend miswire symptoms will show here (e.g., "Cannot GET /api/notices")
+    throw new Error(`HTTP ${res.status} on ${url}\n${text.slice(0, 240)}`);
+  }
+  // some proxies send empty body on 204 — guard it:
+  return text ? JSON.parse(text) : {};
+}
 
 export default function Notices() {
   const { currentUser } = useAuth();
@@ -33,6 +51,16 @@ export default function Notices() {
   const [pinned, setPinned] = useState(false);
   const [posting, setPosting] = useState(false);
 
+  // quick health check so we fail early with a useful message
+  const checkHealth = async () => {
+    try {
+      await fetchJSON(`${API_BASE}/healthz`);
+    } catch (e) {
+      // surface and keep going so user can still see the form/filters
+      setErr(`API not reachable at ${API_BASE}\n${e.message}`);
+    }
+  };
+
   const load = async () => {
     setLoading(true);
     setErr('');
@@ -41,13 +69,8 @@ export default function Notices() {
       if (filter !== 'all') params.set('category', filter);
       if (activeOnly) params.set('active', 'true');
 
-      const res = await fetch(`${BACKEND_URL}/api/notices?${params.toString()}`);
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Failed to load notices (${res.status}). ${text.slice(0, 160)}`);
-      }
-      const json = await res.json();
-      setItems(json.items || []);
+      const data = await fetchJSON(`${API_BASE}/notices?${params.toString()}`);
+      setItems(data.items || []);
     } catch (e) {
       setErr(e.message);
       setItems([]);
@@ -57,7 +80,7 @@ export default function Notices() {
   };
 
   useEffect(() => {
-    load();
+    checkHealth().finally(load);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, activeOnly]);
 
@@ -67,27 +90,25 @@ export default function Notices() {
     setPosting(true);
     setErr('');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/notices`, {
+      const payload = {
+        title,
+        body,
+        category,
+        link: link || null,
+        startAt: startAt ? new Date(startAt).toISOString() : null,
+        endAt: endAt ? new Date(endAt).toISOString() : null,
+        tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+        pinned,
+        userId: currentUser.uid,
+        userName: currentUser.displayName || currentUser.email || 'User',
+      };
+
+      const data = await fetchJSON(`${API_BASE}/notices`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title,
-          body,
-          category,
-          link: link || null,
-          startAt: startAt ? new Date(startAt).toISOString() : null,
-          endAt: endAt ? new Date(endAt).toISOString() : null,
-          tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
-          pinned,
-          userId: currentUser.uid,
-          userName: currentUser.displayName || currentUser.email || 'User',
-        }),
+        body: JSON.stringify(payload),
       });
 
-      const text = await res.text();
-      if (!res.ok) throw new Error(`Failed to post (${res.status}). ${text.slice(0, 160)}`);
-
-      const data = JSON.parse(text);
       setItems((prev) => [data, ...prev]); // optimistic add
       setTitle('');
       setBody('');
@@ -132,7 +153,11 @@ export default function Notices() {
         </button>
       </div>
 
-      {err && <p style={{ color: 'var(--error-color)' }}>{err}</p>}
+      {err && (
+        <pre style={{ color: 'var(--error-color)', whiteSpace: 'pre-wrap' }}>
+{err}
+        </pre>
+      )}
 
       {/* Create form */}
       {SHOW_CREATE_FORM && currentUser && (
@@ -220,7 +245,7 @@ export default function Notices() {
                   <h4 style={{ marginTop: 0 }}>
                     {n.pinned ? '📌 ' : ''}
                     {n.title}
-                    <span 
+                    <span
                       style={{
                         marginLeft: 8,
                         fontSize: 12,
