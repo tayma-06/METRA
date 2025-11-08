@@ -1,28 +1,39 @@
 // routes/notices.js
 // Announcements / Events / Competitions / Notices API
 // Firestore collection: "notices"
-// Doc shape:
-// {
-//   title, body, category, link, pinned, startAt, endAt,
-//   tags, createdById, createdByName, createdAt
-// }
 
-module.exports = function registerNotices(app, { db }) {
+const { Router } = require('express');
+
+module.exports = function buildNoticesRouter({ db }) {
+  if (!db) {
+    // Startable even without Firestore so frontend can still boot
+    const r = Router();
+    r.get('/notices', (_req, res) =>
+      res.status(503).json({ error: 'Firestore not configured on server.' })
+    );
+    r.post('/notices', (_req, res) =>
+      res.status(503).json({ error: 'Firestore not configured on server.' })
+    );
+    r.get('/healthz', (_req, res) => res.json({ ok: true, db: false }));
+    return r;
+  }
+
+  const router = Router();
   const toInt = (v, d) => (isNaN(parseInt(v, 10)) ? d : parseInt(v, 10));
   const safeStr = (v) => (typeof v === 'string' ? v.trim() : '');
   const nowIso = () => new Date().toISOString();
 
-  // GET /api/notices?category=event|competition|notice&active=true&limit=50
-  app.get('/api/notices', async (req, res) => {
+  router.get('/healthz', (_req, res) => res.json({ ok: true, db: true }));
+
+  // GET /api/notices
+  router.get('/notices', async (req, res) => {
     try {
       const { category, active } = req.query;
       const limit = Math.min(toInt(req.query.limit, 50), 200);
 
       let ref = db.collection('notices');
-
       if (category) ref = ref.where('category', '==', String(category));
-      // sort by pinned first, then startAt desc, then createdAt desc
-      // Firestore can't sort mixed; we’ll fetch recent and sort in-memory for simplicity
+
       const snap = await ref.orderBy('createdAt', 'desc').limit(400).get();
       let items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
@@ -36,12 +47,11 @@ module.exports = function registerNotices(app, { db }) {
       }
 
       items.sort((a, b) => {
-        // pinned first
-        if (!!b.pinned - !!a.pinned !== 0) return (!!b.pinned - !!a.pinned);
+        if (!!b.pinned - !!a.pinned !== 0) return !!b.pinned - !!a.pinned;
         const aStart = a.startAt ? Date.parse(a.startAt) : 0;
         const bStart = b.startAt ? Date.parse(b.startAt) : 0;
         if (bStart !== aStart) return bStart - aStart;
-        return (Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
+        return Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0);
       });
 
       return res.json({ items: items.slice(0, limit) });
@@ -51,30 +61,25 @@ module.exports = function registerNotices(app, { db }) {
     }
   });
 
-  // POST /api/notices  (create)
-  // Body: { title, body, category, link?, startAt?, endAt?, tags?[], pinned?, userId, userName }
-  app.post('/api/notices', async (req, res) => {
+  // POST /api/notices
+  router.post('/notices', async (req, res) => {
     try {
       const {
         title, body, category, link, startAt, endAt, tags,
         pinned = false, userId, userName
       } = req.body || {};
 
-      // Basic validation
       if (!safeStr(title) || !safeStr(body) || !safeStr(category)) {
         return res.status(400).json({ error: 'title, body, category are required' });
       }
       if (!safeStr(userId)) return res.status(401).json({ error: 'auth required' });
 
-      // (Server-side authorization)
-      // TODO: check user role from your auth system / admin claims if you want only admins to post.
-
       const doc = {
         title: safeStr(title),
         body: safeStr(body),
-        category: safeStr(category).toLowerCase(), // event | competition | notice | other
+        category: safeStr(category).toLowerCase(),
         link: safeStr(link) || null,
-        startAt: startAt || null, // ISO 8601 or null
+        startAt: startAt || null,
         endAt: endAt || null,
         tags: Array.isArray(tags) ? tags.slice(0, 10).map(safeStr) : [],
         pinned: !!pinned,
@@ -91,8 +96,8 @@ module.exports = function registerNotices(app, { db }) {
     }
   });
 
-  // PATCH /api/notices/:id/pin { pinned: boolean }
-  app.patch('/api/notices/:id/pin', async (req, res) => {
+  // PATCH /api/notices/:id/pin
+  router.patch('/notices/:id/pin', async (req, res) => {
     try {
       const { id } = req.params;
       const { pinned } = req.body || {};
@@ -104,8 +109,8 @@ module.exports = function registerNotices(app, { db }) {
     }
   });
 
-  // (Optional) DELETE /api/notices/:id
-  app.delete('/api/notices/:id', async (req, res) => {
+  // DELETE /api/notices/:id
+  router.delete('/notices/:id', async (req, res) => {
     try {
       const { id } = req.params;
       await db.collection('notices').doc(id).delete();
@@ -115,4 +120,6 @@ module.exports = function registerNotices(app, { db }) {
       return res.status(500).json({ error: 'Failed to delete notice' });
     }
   });
+
+  return router;
 };
