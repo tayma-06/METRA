@@ -14,7 +14,7 @@ function Dashboard() {
         { name: "Jeba Sajida" },
         { name: "Kanetah Khan" },
         { name: "Khadiza Sultana" },
-        { name: "Anika Tahsin" }
+        { name: "Anika Tahsin Rahman" }
     ];
 
     // Fetch dashboard summary
