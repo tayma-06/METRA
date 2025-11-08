@@ -1,4 +1,4 @@
-// src/firebase.js (CRA version)
+// src/firebase.js - UPDATED FOR CREATE REACT APP
 import { initializeApp, getApps } from "firebase/app";
 import {
   getAuth,
@@ -13,92 +13,91 @@ import {
   serverTimestamp,
   connectFirestoreEmulator,
 } from "firebase/firestore";
-import { getStorage, connectStorageEmulator } from "firebase/storage";
-// Optional analytics (only on secure origins and when measurementId exists)
+import {
+  getStorage,
+  connectStorageEmulator,
+} from "firebase/storage";
 import { getAnalytics, isSupported as analyticsSupported } from "firebase/analytics";
 
-/*
-Create a client .env (or .env.local) at the React app root:
-
-REACT_APP_FIREBASE_API_KEY=...
-REACT_APP_FIREBASE_AUTH_DOMAIN=...
-REACT_APP_FIREBASE_PROJECT_ID=...
-REACT_APP_FIREBASE_STORAGE_BUCKET=...
-REACT_APP_FIREBASE_MESSAGING_SENDER_ID=...
-REACT_APP_FIREBASE_APP_ID=...
-REACT_APP_FIREBASE_MEASUREMENT_ID=           # optional
-REACT_APP_USE_EMULATORS=false                # "true" to use local emulators
-*/
-
-const {
-  REACT_APP_FIREBASE_API_KEY,
-  REACT_APP_FIREBASE_AUTH_DOMAIN,
-  REACT_APP_FIREBASE_PROJECT_ID,
-  REACT_APP_FIREBASE_STORAGE_BUCKET,
-  REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  REACT_APP_FIREBASE_APP_ID,
-  REACT_APP_FIREBASE_MEASUREMENT_ID,
-  REACT_APP_USE_EMULATORS,
-} = process.env;
-
+// Your Firebase web app configuration - USING process.env for CRA
 const firebaseConfig = {
-  apiKey: REACT_APP_FIREBASE_API_KEY,
-  authDomain: REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: REACT_APP_FIREBASE_APP_ID,
-  measurementId: REACT_APP_FIREBASE_MEASUREMENT_ID || undefined,
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "AIzaSyDODUa-r44xdunMa-37ahfePERTbD8rVlk",
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "metra-app.firebaseapp.com",
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "metra-app",
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "metra-app.firebasestorage.app",
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "654469394667",
+  appId: process.env.REACT_APP_FIREBASE_APP_ID || "1:654469394667:web:86ad0c2bb34a21fcfa8eae",
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID || "G-SDEKLLJX12"
 };
 
-// HMR-safe init
-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+// Validate critical configuration
+console.log("Firebase Config:", {
+  apiKey: firebaseConfig.apiKey ? "✓ Set" : "✗ Missing",
+  projectId: firebaseConfig.projectId,
+  usingEnv: !!process.env.REACT_APP_FIREBASE_API_KEY
+});
 
-// Core SDKs
+// Initialize Firebase
+let app;
+try {
+  app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+  console.log("✅ Firebase initialized successfully");
+} catch (error) {
+  console.error("❌ Firebase initialization failed:", error);
+  throw error;
+}
+
+// Initialize services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
-// Stay logged in across reloads
-setPersistence(auth, browserLocalPersistence).catch(() => {
-  /* non-fatal */
+// Set auth persistence
+setPersistence(auth, browserLocalPersistence).catch((error) => {
+  console.warn("Auth persistence failed:", error);
 });
 
-// Optional analytics
+// Initialize Analytics
 (async () => {
   try {
     if (firebaseConfig.measurementId && (await analyticsSupported())) {
       getAnalytics(app);
+      console.log("✅ Analytics initialized");
     }
-  } catch {
-    // ignore analytics errors on http / unsupported envs
+  } catch (error) {
+    console.log("ℹ️  Analytics not available in this environment");
   }
 })();
 
-// Optional: Local emulators for dev
-const useEmulators = String(REACT_APP_USE_EMULATORS || "").toLowerCase() === "true";
-if (useEmulators) {
+// Emulators for development
+if (process.env.NODE_ENV === 'development' && process.env.REACT_APP_USE_EMULATORS === "true") {
   try {
-    connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
+    connectAuthEmulator(auth, "http://localhost:9099");
     connectFirestoreEmulator(db, "localhost", 8080);
     connectStorageEmulator(storage, "localhost", 9199);
-  } catch {
-    /* ignore if already connected */
+    console.log("✅ Connected to Firebase emulators");
+  } catch (error) {
+    console.log("ℹ️  Using production Firebase services");
   }
 }
 
-/**
- * Add an achievement for a user.
- * Uses Firestore server time if date not provided.
- */
+// Achievement helper function
 export const addAchievement = async (userId, achievement) => {
-  const payload = {
-    title: achievement.title || "Achievement",
-    description: achievement.description || "",
-    dateEarned: achievement.dateEarned || serverTimestamp(),
-    icon: achievement.icon || null,
-    points: typeof achievement.points === "number" ? achievement.points : null,
-  };
-  const ref = await addDoc(collection(db, "users", userId, "achievements"), payload);
-  return ref;
+  try {
+    const payload = {
+      title: achievement.title || "Achievement",
+      description: achievement.description || "",
+      dateEarned: achievement.dateEarned || serverTimestamp(),
+      icon: achievement.icon || null,
+      points: typeof achievement.points === "number" ? achievement.points : null,
+    };
+    
+    const ref = await addDoc(collection(db, "users", userId, "achievements"), payload);
+    return ref;
+  } catch (error) {
+    console.error("Error adding achievement:", error);
+    throw error;
+  }
 };
+
+export default app;
