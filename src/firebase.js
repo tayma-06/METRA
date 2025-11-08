@@ -1,4 +1,4 @@
-// src/firebase.js
+// src/firebase.js (CRA version)
 import { initializeApp, getApps } from "firebase/app";
 import {
   getAuth,
@@ -13,35 +13,45 @@ import {
   serverTimestamp,
   connectFirestoreEmulator,
 } from "firebase/firestore";
-import {
-  getStorage,
-  connectStorageEmulator,
-} from "firebase/storage";
-// Optional analytics (only in secure origins and when measurementId exists)
+import { getStorage, connectStorageEmulator } from "firebase/storage";
+// Optional analytics (only on secure origins and when measurementId exists)
 import { getAnalytics, isSupported as analyticsSupported } from "firebase/analytics";
 
-/**
- * Environment-driven config (create .env.local)
- *   VITE_FIREBASE_API_KEY=...
- *   VITE_FIREBASE_AUTH_DOMAIN=...
- *   VITE_FIREBASE_PROJECT_ID=...
- *   VITE_FIREBASE_STORAGE_BUCKET=...
- *   VITE_FIREBASE_MESSAGING_SENDER_ID=...
- *   VITE_FIREBASE_APP_ID=...
- *   VITE_FIREBASE_MEASUREMENT_ID=...   (optional)
- *   VITE_USE_EMULATORS=true            (optional for local dev)
- */
+/*
+Create a client .env (or .env.local) at the React app root:
+
+REACT_APP_FIREBASE_API_KEY=...
+REACT_APP_FIREBASE_AUTH_DOMAIN=...
+REACT_APP_FIREBASE_PROJECT_ID=...
+REACT_APP_FIREBASE_STORAGE_BUCKET=...
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=...
+REACT_APP_FIREBASE_APP_ID=...
+REACT_APP_FIREBASE_MEASUREMENT_ID=           # optional
+REACT_APP_USE_EMULATORS=false                # "true" to use local emulators
+*/
+
+const {
+  REACT_APP_FIREBASE_API_KEY,
+  REACT_APP_FIREBASE_AUTH_DOMAIN,
+  REACT_APP_FIREBASE_PROJECT_ID,
+  REACT_APP_FIREBASE_STORAGE_BUCKET,
+  REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  REACT_APP_FIREBASE_APP_ID,
+  REACT_APP_FIREBASE_MEASUREMENT_ID,
+  REACT_APP_USE_EMULATORS,
+} = process.env;
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || undefined,
+  apiKey: REACT_APP_FIREBASE_API_KEY,
+  authDomain: REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: REACT_APP_FIREBASE_APP_ID,
+  measurementId: REACT_APP_FIREBASE_MEASUREMENT_ID || undefined,
 };
 
-// HMR-safe app init
+// HMR-safe init
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 
 // Core SDKs
@@ -49,29 +59,29 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
-// Auth persistence (stay logged in across reloads)
+// Stay logged in across reloads
 setPersistence(auth, browserLocalPersistence).catch(() => {
-  /* non-fatal; falls back to default */
+  /* non-fatal */
 });
 
-// Optional: Analytics (only if supported + measurementId present)
+// Optional analytics
 (async () => {
   try {
     if (firebaseConfig.measurementId && (await analyticsSupported())) {
       getAnalytics(app);
     }
   } catch {
-    // Ignore analytics errors in unsupported environments (e.g., http, SSR)
+    // ignore analytics errors on http / unsupported envs
   }
 })();
 
 // Optional: Local emulators for dev
-if (import.meta.env.VITE_USE_EMULATORS === "true") {
+const useEmulators = String(REACT_APP_USE_EMULATORS || "").toLowerCase() === "true";
+if (useEmulators) {
   try {
     connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
     connectFirestoreEmulator(db, "localhost", 8080);
     connectStorageEmulator(storage, "localhost", 9199);
-    // console.info("Connected to Firebase emulators.");
   } catch {
     /* ignore if already connected */
   }
@@ -79,13 +89,12 @@ if (import.meta.env.VITE_USE_EMULATORS === "true") {
 
 /**
  * Add an achievement for a user.
- * If no date provided, uses Firestore server time (preferred over client clock).
+ * Uses Firestore server time if date not provided.
  */
 export const addAchievement = async (userId, achievement) => {
   const payload = {
     title: achievement.title || "Achievement",
     description: achievement.description || "",
-    // Prefer server time if not provided
     dateEarned: achievement.dateEarned || serverTimestamp(),
     icon: achievement.icon || null,
     points: typeof achievement.points === "number" ? achievement.points : null,
@@ -93,6 +102,3 @@ export const addAchievement = async (userId, achievement) => {
   const ref = await addDoc(collection(db, "users", userId, "achievements"), payload);
   return ref;
 };
-
-// If you still need Timestamp in some components, you can import from firestore directly:
-// import { Timestamp } from "firebase/firestore";
