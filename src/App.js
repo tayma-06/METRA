@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import Notices from './components/Notices';
+import { CourseCatalogPage, CourseDetailPage } from "./components/CourseMarketplaceDemo";
 
 // Pages hehe
 import Dashboard from './components/Dashboard';
@@ -34,8 +35,12 @@ const AppLayout = () => {
         <Link to="/" className="nav-brand">METRA</Link>
 
         <div className="nav-links">
+          {/* Public link so you can see the demo without logging in */}
+          <Link to="/courses">Courses</Link>
+
           {currentUser && (
-            <><Link to="/notices">Notices</Link>
+            <>
+              <Link to="/notices">Notices</Link>
               <Link to="/reviews">Course Reviews</Link>
               <Link to="/hub">Senior Hub</Link>
               <Link to="/groups">Study Groups</Link>
@@ -100,10 +105,13 @@ function App() {
           {/* Public */}
           <Route path="login" element={<Login />} />
           <Route path="signup" element={<Signup />} />
+          {/* NEW: public course marketplace demo */}
+          <Route path="courses" element={<CourseCatalogPage />} />
+          <Route path="courses/:courseId" element={<CourseDetailPage />} />
 
           {/* Protected */}
           <Route element={<ProtectedRoute />}>
-          <Route path="notices" element={<Notices />} />
+            <Route path="notices" element={<Notices />} />
             <Route index element={<Dashboard />} />
             <Route path="reviews" element={<CourseReviews />} />
             <Route path="hub" element={<SeniorHub />} />
