@@ -64,6 +64,13 @@ app.get('/', (_req, res) => {
     gemini: !!GEMINI_API_KEY,
   });
 });
+// server.js  (add near the other route registrations)
+const registerPersonalized = require('./routes/personalized');
+registerPersonalized(app, { db, FieldValue, GEMINI_API_KEY, fetch });
+// server.js
+// ...
+const registerNotices = require('./routes/notices');
+registerNotices(app, { db }); // pass your Firestore db instance
 
 // =====================================================
 // AI Solver (Gemini) - ORIGINAL

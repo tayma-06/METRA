@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
+import Notices from './components/Notices';
 
 // Pages hehe
 import Dashboard from './components/Dashboard';
@@ -34,7 +35,7 @@ const AppLayout = () => {
 
         <div className="nav-links">
           {currentUser && (
-            <>
+            <><Link to="/notices">Notices</Link>
               <Link to="/reviews">Course Reviews</Link>
               <Link to="/hub">Senior Hub</Link>
               <Link to="/groups">Study Groups</Link>
@@ -102,6 +103,7 @@ function App() {
 
           {/* Protected */}
           <Route element={<ProtectedRoute />}>
+          <Route path="notices" element={<Notices />} />
             <Route index element={<Dashboard />} />
             <Route path="reviews" element={<CourseReviews />} />
             <Route path="hub" element={<SeniorHub />} />
