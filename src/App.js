@@ -4,7 +4,7 @@ import { useAuth } from './contexts/AuthContext';
 import Notices from './components/Notices';
 import { CourseCatalogPage, CourseDetailPage } from "./components/CourseMarketplaceDemo";
 
-// Pages hehe
+// Pages
 import Dashboard from './components/Dashboard';
 import CourseReviews from './components/CourseReviews';
 import SeniorHub from './components/SeniorHub';
@@ -16,7 +16,7 @@ import Login from './components/Login';
 import Signup from './components/Signup';
 import Profile from './components/Profile';
 import StudyGroupChat from './components/StudyGroupChat';
-import VideoCall from './components/VideoCall'; // <-- video call page
+import VideoCall from './components/VideoCall';
 import './styles.css';
 
 // Guard
@@ -25,7 +25,7 @@ const ProtectedRoute = () => {
   return currentUser ? <Outlet /> : <Navigate to="/login" replace />;
 };
 
-// Layout
+// Layout - Keeping your original structure, just cleaner styling
 const AppLayout = () => {
   const { currentUser } = useAuth();
 
@@ -35,17 +35,17 @@ const AppLayout = () => {
         <Link to="/" className="nav-brand">METRA</Link>
 
         <div className="nav-links">
-          {/* Public link so you can see the demo without logging in */}
+          {/* Public link */}
           <Link to="/courses">Courses</Link>
 
           {currentUser && (
             <>
               <Link to="/notices">Notices</Link>
-              <Link to="/reviews">Course Reviews</Link>
+              <Link to="/reviews">Reviews</Link>
               <Link to="/hub">Senior Hub</Link>
-              <Link to="/groups">Study Groups</Link>
+              <Link to="/groups">Groups</Link>
               <Link to="/solver">AI Solver</Link>
-              <Link to="/progress">My Progress</Link>
+              <Link to="/progress">Progress</Link>
               <Link to="/materials">Materials</Link>
             </>
           )}
@@ -53,37 +53,13 @@ const AppLayout = () => {
 
         <div className="nav-user">
           {currentUser ? (
-            <Link
-              to="/profile"
-              style={{
-                backgroundColor: '#e6f2ff',
-                color: '#007aff',
-                padding: '0.5rem 1rem',
-                borderRadius: '20px',
-                textDecoration: 'none',
-                fontWeight: 500
-              }}
-            >
-              {currentUser.displayName || 'My Profile'}
+            <Link to="/profile" className="profile-btn">
+              {currentUser.displayName || 'Profile'}
             </Link>
           ) : (
             <>
-              <Link to="/login" style={{ marginRight: '1rem', color: '#333', fontWeight: 500 }}>
-                Log In
-              </Link>
-              <Link
-                to="/signup"
-                style={{
-                  backgroundColor: '#007aff',
-                  color: '#fff',
-                  padding: '0.5rem 1rem',
-                  borderRadius: '20px',
-                  textDecoration: 'none',
-                  fontWeight: 500
-                }}
-              >
-                Sign Up
-              </Link>
+              <Link to="/login" className="login-btn">Log In</Link>
+              <Link to="/signup" className="signup-btn">Sign Up</Link>
             </>
           )}
         </div>
@@ -96,7 +72,7 @@ const AppLayout = () => {
   );
 };
 
-// Routes
+// Routes - Your original structure
 function App() {
   return (
     <Router>
@@ -105,19 +81,18 @@ function App() {
           {/* Public */}
           <Route path="login" element={<Login />} />
           <Route path="signup" element={<Signup />} />
-          {/* NEW: public course marketplace demo */}
           <Route path="courses" element={<CourseCatalogPage />} />
           <Route path="courses/:courseId" element={<CourseDetailPage />} />
 
           {/* Protected */}
           <Route element={<ProtectedRoute />}>
-            <Route path="notices" element={<Notices />} />
             <Route index element={<Dashboard />} />
+            <Route path="notices" element={<Notices />} />
             <Route path="reviews" element={<CourseReviews />} />
             <Route path="hub" element={<SeniorHub />} />
             <Route path="groups" element={<StudyGroups />} />
             <Route path="groups/:groupId" element={<StudyGroupChat />} />
-            <Route path="groups/:groupId/call" element={<VideoCall />} /> {/* video call room */}
+            <Route path="groups/:groupId/call" element={<VideoCall />} />
             <Route path="solver" element={<AISolver />} />
             <Route path="progress" element={<ProgressAnalytics />} />
             <Route path="materials" element={<MaterialRepository />} />
