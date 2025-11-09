@@ -37,6 +37,7 @@ body {
     padding: 1.25rem 2.5rem;
     background-color: var(--card-background);
     border-bottom: 1px solid var(--border-color);
+    position: -webkit-sticky;
     position: sticky;
     top: 0;
     z-index: 1000;
@@ -417,6 +418,8 @@ button:hover {
     border-radius: 12px;
     margin-bottom: 1rem;
     max-width: 75%;
+    width: -webkit-fit-content;
+    width: -moz-fit-content;
     width: fit-content;
     box-shadow: var(--shadow);
 }
@@ -471,10 +474,12 @@ body {
     padding: 1.25rem 2.5rem;
     background-color: var(--card-background);
     border-bottom: 1px solid var(--border-color);
+    position: -webkit-sticky;
     position: sticky;
     top: 0;
     z-index: 1000;
-    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
 }
 
 .nav-brand {
@@ -659,7 +664,13 @@ body {
     border: 2px solid var(--light-blue);
     border-top: 2px solid var(--primary-color);
     border-radius: 50%;
-    animation: spin 1s linear infinite;
+    -webkit-animation: spin 1s linear infinite;
+            animation: spin 1s linear infinite;
+}
+
+@-webkit-keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 @keyframes spin {
@@ -1020,6 +1031,8 @@ body {
     border-radius: 12px;
     margin-bottom: 1rem;
     max-width: 75%;
+    width: -webkit-fit-content;
+    width: -moz-fit-content;
     width: fit-content;
     box-shadow: var(--shadow);
 }
